@@ -134,13 +134,47 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
     }
   };
 
+  const createDemoMatch = async () => {
+    try {
+      setLoading(true);
+      // Create a demo match in Firebase
+      const matchId = await liveScoringService.createMatch({
+        team1: teamA || 'Mumbai Indians',
+        team2: teamB || 'Chennai Super Kings',
+        overs: SCORING_CONFIG.DEFAULT_OVERS,
+        currentInnings: 1,
+        currentOver: 0,
+        currentBall: 0,
+        totalRuns: 0,
+        wickets: 0,
+        balls: [],
+        currentBatsmen: {
+          striker: { id: 'rohit-sharma', name: 'Rohit Sharma', runs: 0, balls: 0, isOut: false },
+          nonStriker: { id: 'suryakumar-yadav', name: 'Suryakumar Yadav', runs: 0, balls: 0, isOut: false }
+        },
+        currentBowler: { id: 'jasprit-bumrah', name: 'Jasprit Bumrah', overs: 0, wickets: 0, runs: 0 },
+        nextBatsman: { id: 'tilak-varma', name: 'Tilak Varma' },
+        team1Players: [],
+        team2Players: []
+      });
+      
+      // Update the matchId in the component
+      setMatchData(prev => ({ ...prev, id: matchId }));
+      loadRealPlayers();
+    } catch (error) {
+      console.error('Error creating demo match:', error);
+      loadRealPlayers();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (matchId) {
       loadMatchData();
     } else {
-      setLoading(false);
-      // Load real players for demo mode
-      loadRealPlayers();
+      // Create a demo match if no matchId provided
+      createDemoMatch();
     }
   }, [matchId]);
 
@@ -248,9 +282,9 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
           ball: matchData.currentBall,
           runs,
           isWicket,
-          wicketType,
+          wicketType: isWicket ? wicketType : null, // Only include if it's a wicket
           isExtra,
-          extraType,
+          extraType: isExtra ? extraType : null, // Only include if it's an extra
           batsmanId: 'current-batsman', // TODO: Get from current batting team
           bowlerId: 'current-bowler', // TODO: Get from current bowling team
         };
@@ -265,9 +299,9 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
         ball: matchData.currentBall,
         runs,
         isWicket,
-        wicketType,
+        wicketType: isWicket ? wicketType : undefined,
         isExtra,
-        extraType,
+        extraType: isExtra ? extraType : undefined,
         timestamp: Date.now(),
       };
 

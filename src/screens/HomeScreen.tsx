@@ -276,6 +276,7 @@ const HomeScreen: React.FC = () => {
   };
 
   const handlePlaying11Complete = () => {
+    setSelectedMatchId('demo-match'); // Set match ID for the flow
     setShowPlaying11(false);
     setShowLiveScoring(true);
   };
@@ -717,17 +718,16 @@ const HomeScreen: React.FC = () => {
               <Text style={styles.welcomeText}>
                 🎉 Welcome back! Use the profile icon above to manage your account.
               </Text>
-              {selectedMatchId ? (
+              <Button
+                title="🏏 Start A Match"
+                onPress={handleStartMatchPress}
+                size="large"
+                style={styles.primaryButton}
+              />
+              {selectedMatchId && (
                 <Button
                   title="🏏 Continue Match"
                   onPress={handleLiveScoringPress}
-                  size="large"
-                  style={styles.primaryButton}
-                />
-              ) : (
-                <Button
-                  title="🏏 Start A Match"
-                  onPress={handleStartMatchPress}
                   size="large"
                   style={styles.primaryButton}
                 />
