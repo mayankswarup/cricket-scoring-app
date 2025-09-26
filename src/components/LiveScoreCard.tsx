@@ -3,242 +3,387 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  Platform,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
-import { COLORS, SIZES, FONTS, COUNTRY_COLORS } from '../constants';
-import { Match } from '../types';
-import { mockCurrentBatsmen, mockCurrentBowlers } from '../data/mockData';
+import { COLORS, SIZES, FONTS } from '../constants';
 
-interface LiveScoreCardProps {
-  match: Match;
-  onPress?: () => void;
+const { width } = Dimensions.get('window');
+
+interface Player {
+  id: string;
+  name: string;
+  runs: number;
+  balls: number;
+  isOut: boolean;
 }
 
-const LiveScoreCard: React.FC<LiveScoreCardProps> = ({ match, onPress }) => {
-  const { homeTeam, awayTeam, score, status } = match;
+interface Bowler {
+  id: string;
+  name: string;
+  overs: number;
+  wickets: number;
+  runs: number;
+}
 
-  // Get container style with platform-specific shadows
-  const getContainerStyle = () => {
-    const baseStyle = {
-      backgroundColor: COLORS.surface,
-      borderRadius: SIZES.md,
-      padding: SIZES.lg,
-      marginVertical: SIZES.sm,
-      elevation: 5,
-    };
-
-    if (Platform.OS === 'web') {
-      return {
-        ...baseStyle,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-      };
-    } else {
-      return {
-        ...baseStyle,
-        shadowColor: '#000',
-        shadowOffset: {
-          width: 0,
-          height: 2,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 3.84,
-      };
-    }
+interface MatchData {
+  team1: string;
+  team2: string;
+  overs: number;
+  currentInnings: number;
+  currentOver: number;
+  currentBall: number;
+  totalRuns: number;
+  wickets: number;
+  currentBatsmen: {
+    striker: Player;
+    nonStriker: Player;
   };
+  currentBowler: Bowler;
+  nextBatsman: Player;
+  recentBalls: Array<{
+    over: number;
+    ball: number;
+    runs: number;
+    type: string;
+  }>;
+}
 
-  // Get country-specific background color
-  const getCountryBackgroundColor = () => {
-    const battingTeam = score?.currentInnings === 'home' ? homeTeam.name : awayTeam.name;
-    return COUNTRY_COLORS[battingTeam as keyof typeof COUNTRY_COLORS] || COLORS.surface;
-  };
+interface LiveScorecardProps {
+  matchData: MatchData;
+  isLive?: boolean;
+}
 
-  // Get status color
-  const getStatusColor = () => {
-    switch (status) {
-      case 'live':
-        return COLORS.error; // Red for live
-      case 'upcoming':
-        return COLORS.warning; // Orange for upcoming
-      case 'completed':
-        return COLORS.success; // Green for completed
-      default:
-        return COLORS.textSecondary;
-    }
-  };
+const LiveScorecard: React.FC<LiveScorecardProps> = ({ matchData, isLive = true }) => {
+  const {
+    team1,
+    team2,
+    overs,
+    currentInnings,
+    currentOver,
+    currentBall,
+    totalRuns,
+    wickets,
+    currentBatsmen,
+    currentBowler,
+    nextBatsman,
+    recentBalls,
+  } = matchData;
 
-  // Get status text
-  const getStatusText = () => {
-    switch (status) {
-      case 'live':
-        return '🔴 LIVE';
-      case 'upcoming':
-        return '⏰ UPCOMING';
-      case 'completed':
-        return '✅ COMPLETED';
-      default:
-        return 'UNKNOWN';
-    }
-  };
-
-  // Get current score
-  const getCurrentScore = () => {
-    if (!score) return 'TBD';
-    
-    const { homeTeam: home, awayTeam: away, currentInnings } = score;
-    
-    if (currentInnings === 'home') {
-      return `${home.runs}/${home.wickets} (${home.overs} overs)`;
-    } else {
-      return `${away.runs}/${away.wickets} (${away.overs} overs)`;
-    }
-  };
-
-  // Get current team
-  const getCurrentTeam = () => {
-    if (!score) return '';
-    
-    const { currentInnings } = score;
-    return currentInnings === 'home' ? homeTeam.name : awayTeam.name;
-  };
-
-  // Get target
-  const getTarget = () => {
-    if (!score || !score.target) return '';
-    return `Target: ${score.target}`;
-  };
+  const runRate = currentOver > 0 ? (totalRuns / currentOver).toFixed(2) : '0.00';
+  const requiredRunRate = currentOver > 0 ? ((totalRuns + 1) / currentOver).toFixed(2) : '0.00';
 
   return (
-    <TouchableOpacity style={getContainerStyle()} onPress={onPress} activeOpacity={0.7}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.statusText, { color: getStatusColor() }]}>
-          {getStatusText()}
-        </Text>
-        <Text style={styles.tournamentText}>T20 World Cup 2024</Text>
-      </View>
-
-      {/* Teams */}
-      <View style={styles.teamsContainer}>
-        <View style={styles.team}>
-          <Text style={styles.teamFlag}>{homeTeam.logo}</Text>
-          <Text style={styles.teamName}>{homeTeam.name}</Text>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Match Header */}
+      <View style={styles.matchHeader}>
+        <View style={styles.teamsContainer}>
+          <Text style={styles.teamName}>{team1}</Text>
+          <Text style={styles.vsText}>vs</Text>
+          <Text style={styles.teamName}>{team2}</Text>
         </View>
-        
-        <Text style={styles.vsText}>vs</Text>
-        
-        <View style={styles.team}>
-          <Text style={styles.teamFlag}>{awayTeam.logo}</Text>
-          <Text style={styles.teamName}>{awayTeam.name}</Text>
-        </View>
-      </View>
-
-      {/* Score */}
-      <View style={styles.scoreContainer}>
-        <Text style={styles.battingTeam}>
-          🏏 {getCurrentTeam()} (Batting)
-        </Text>
-        <Text style={styles.score}>{getCurrentScore()}</Text>
-        {getTarget() && (
-          <Text style={styles.target}>{getTarget()}</Text>
+        {isLive && (
+          <View style={styles.liveIndicator}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>LIVE</Text>
+          </View>
         )}
       </View>
 
-      {/* Current Players */}
-      <View style={styles.playersContainer}>
-        <Text style={styles.playerLabel}>Current Batsmen:</Text>
-        {mockCurrentBatsmen[match.id as keyof typeof mockCurrentBatsmen]?.map((batsman, index) => (
-          <Text key={index} style={styles.player}>
-            🏏 {batsman.name}{batsman.isStriker ? '*' : null} {batsman.runs} ({batsman.balls})
-          </Text>
-        ))}
-        
-        <Text style={styles.playerLabel}>Current Bowler:</Text>
-        {mockCurrentBowlers[match.id as keyof typeof mockCurrentBowlers] && (
-          <Text style={styles.player}>
-            🎯 {mockCurrentBowlers[match.id as keyof typeof mockCurrentBowlers].name} {mockCurrentBowlers[match.id as keyof typeof mockCurrentBowlers].wickets}/{mockCurrentBowlers[match.id as keyof typeof mockCurrentBowlers].runs} ({mockCurrentBowlers[match.id as keyof typeof mockCurrentBowlers].overs})
-          </Text>
-        )}
+      {/* Score Summary */}
+      <View style={styles.scoreSummary}>
+        <View style={styles.scoreContainer}>
+          <Text style={styles.scoreText}>{totalRuns}</Text>
+          <Text style={styles.scoreLabel}>Runs</Text>
+        </View>
+        <View style={styles.scoreContainer}>
+          <Text style={styles.scoreText}>{wickets}</Text>
+          <Text style={styles.scoreLabel}>Wickets</Text>
+        </View>
+        <View style={styles.scoreContainer}>
+          <Text style={styles.scoreText}>{currentOver}.{currentBall}</Text>
+          <Text style={styles.scoreLabel}>Overs</Text>
+        </View>
+        <View style={styles.scoreContainer}>
+          <Text style={styles.scoreText}>{runRate}</Text>
+          <Text style={styles.scoreLabel}>Run Rate</Text>
+        </View>
       </View>
-    </TouchableOpacity>
+
+      {/* Current Batsmen */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Current Batsmen</Text>
+        <View style={styles.batsmenContainer}>
+          <View style={styles.batsmanCard}>
+            <Text style={styles.batsmanName}>
+              {currentBatsmen.striker.name}*
+            </Text>
+            <Text style={styles.batsmanScore}>
+              {currentBatsmen.striker.runs} ({currentBatsmen.striker.balls})
+            </Text>
+          </View>
+          <View style={styles.batsmanCard}>
+            <Text style={styles.batsmanName}>
+              {currentBatsmen.nonStriker.name}
+            </Text>
+            <Text style={styles.batsmanScore}>
+              {currentBatsmen.nonStriker.runs} ({currentBatsmen.nonStriker.balls})
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Current Bowler */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Current Bowler</Text>
+        <View style={styles.bowlerCard}>
+          <Text style={styles.bowlerName}>{currentBowler.name}</Text>
+          <Text style={styles.bowlerStats}>
+            {currentBowler.overs} overs, {currentBowler.wickets} wickets, {currentBowler.runs} runs
+          </Text>
+        </View>
+      </View>
+
+      {/* Next Batsman */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Next Batsman</Text>
+        <View style={styles.nextBatsmanCard}>
+          <Text style={styles.nextBatsmanName}>{nextBatsman.name}</Text>
+        </View>
+      </View>
+
+      {/* Recent Balls */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Recent Balls</Text>
+        <View style={styles.recentBallsContainer}>
+          {recentBalls.slice(-6).reverse().map((ball, index) => (
+            <View key={index} style={styles.ballItem}>
+              <Text style={styles.ballOver}>{ball.over}.{ball.ball}</Text>
+              <Text style={[
+                styles.ballRuns,
+                ball.runs === 0 && styles.ballDot,
+                ball.runs === 4 && styles.ballFour,
+                ball.runs === 6 && styles.ballSix,
+              ]}>
+                {ball.runs}
+              </Text>
+              <Text style={styles.ballType}>{ball.type}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Match Info */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Match Information</Text>
+        <View style={styles.matchInfoContainer}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Innings:</Text>
+            <Text style={styles.infoValue}>{currentInnings}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Total Overs:</Text>
+            <Text style={styles.infoValue}>{overs}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Current Over:</Text>
+            <Text style={styles.infoValue}>{currentOver}.{currentBall}</Text>
+          </View>
+        </View>
+      </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  matchHeader: {
+    backgroundColor: COLORS.primary,
+    padding: SIZES.lg,
     alignItems: 'center',
-    marginBottom: SIZES.md,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  tournamentText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
   },
   teamsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SIZES.lg,
-  },
-  team: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  teamFlag: {
-    fontSize: 24,
-    marginBottom: SIZES.xs,
+    marginBottom: SIZES.sm,
   },
   teamName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    color: COLORS.white,
+    marginHorizontal: SIZES.md,
   },
   vsText: {
     fontSize: 14,
-    color: COLORS.textSecondary,
-    marginHorizontal: SIZES.md,
+    fontFamily: FONTS.medium,
+    color: COLORS.white,
+    opacity: 0.8,
+  },
+  liveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.error,
+    paddingHorizontal: SIZES.sm,
+    paddingVertical: SIZES.xs,
+    borderRadius: SIZES.sm,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.white,
+    marginRight: SIZES.xs,
+  },
+  liveText: {
+    fontSize: 12,
+    fontFamily: FONTS.bold,
+    color: COLORS.white,
+  },
+  scoreSummary: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surface,
+    padding: SIZES.lg,
+    justifyContent: 'space-around',
   },
   scoreContainer: {
     alignItems: 'center',
-    marginBottom: SIZES.lg,
   },
-  battingTeam: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginBottom: SIZES.xs,
-  },
-  score: {
+  scoreText: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginBottom: SIZES.xs,
-  },
-  target: {
-    fontSize: 14,
-    color: COLORS.secondary,
-    fontWeight: '600',
-  },
-  playersContainer: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: SIZES.md,
-  },
-  playerLabel: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginBottom: SIZES.xs,
-    marginTop: SIZES.sm,
-  },
-  player: {
-    fontSize: 14,
+    fontFamily: FONTS.bold,
     color: COLORS.text,
     marginBottom: SIZES.xs,
   },
+  scoreLabel: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.textSecondary,
+  },
+  section: {
+    backgroundColor: COLORS.surface,
+    margin: SIZES.sm,
+    padding: SIZES.lg,
+    borderRadius: SIZES.md,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+    marginBottom: SIZES.md,
+  },
+  batsmenContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  batsmanCard: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    padding: SIZES.md,
+    borderRadius: SIZES.sm,
+    marginHorizontal: SIZES.xs,
+    alignItems: 'center',
+  },
+  batsmanName: {
+    fontSize: 14,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+    marginBottom: SIZES.xs,
+  },
+  batsmanScore: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.textSecondary,
+  },
+  bowlerCard: {
+    backgroundColor: COLORS.background,
+    padding: SIZES.md,
+    borderRadius: SIZES.sm,
+    alignItems: 'center',
+  },
+  bowlerName: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+    marginBottom: SIZES.xs,
+  },
+  bowlerStats: {
+    fontSize: 14,
+    fontFamily: FONTS.medium,
+    color: COLORS.textSecondary,
+  },
+  nextBatsmanCard: {
+    backgroundColor: COLORS.background,
+    padding: SIZES.md,
+    borderRadius: SIZES.sm,
+    alignItems: 'center',
+  },
+  nextBatsmanName: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+  },
+  recentBallsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  ballItem: {
+    width: (width - 80) / 3,
+    backgroundColor: COLORS.background,
+    padding: SIZES.sm,
+    borderRadius: SIZES.sm,
+    marginBottom: SIZES.sm,
+    alignItems: 'center',
+  },
+  ballOver: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.textSecondary,
+    marginBottom: SIZES.xs,
+  },
+  ballRuns: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+    marginBottom: SIZES.xs,
+  },
+  ballDot: {
+    color: COLORS.textSecondary,
+  },
+  ballFour: {
+    color: COLORS.success,
+  },
+  ballSix: {
+    color: COLORS.primary,
+  },
+  ballType: {
+    fontSize: 10,
+    fontFamily: FONTS.medium,
+    color: COLORS.textSecondary,
+  },
+  matchInfoContainer: {
+    backgroundColor: COLORS.background,
+    padding: SIZES.md,
+    borderRadius: SIZES.sm,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: SIZES.sm,
+  },
+  infoLabel: {
+    fontSize: 14,
+    fontFamily: FONTS.medium,
+    color: COLORS.textSecondary,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+  },
 });
 
-export default LiveScoreCard;
+export default LiveScorecard;

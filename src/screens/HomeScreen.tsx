@@ -31,6 +31,7 @@ import LiveScoringScreen from './LiveScoringScreen';
 import MatchManagementScreen from './MatchManagementScreen';
 import StartMatchScreen from './StartMatchScreen';
 import Playing11Screen from './Playing11Screen';
+import SpectatorScreen from './SpectatorScreen';
 // import PlayerSearchScreen from './PlayerSearchScreen';
 // import TeamCreationScreen from './TeamCreationScreen';
 // import { apiService } from '../services/api';
@@ -63,6 +64,7 @@ const HomeScreen: React.FC = () => {
   const [showMatchManagement, setShowMatchManagement] = useState(false);
   const [showStartMatch, setShowStartMatch] = useState(false);
   const [showPlaying11, setShowPlaying11] = useState(false);
+  const [showSpectator, setShowSpectator] = useState(false);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [matchTeams, setMatchTeams] = useState<{teamA: string, teamB: string} | null>(null);
   const [tossResult, setTossResult] = useState<{winner: string, decision: string} | null>(null);
@@ -236,7 +238,7 @@ const HomeScreen: React.FC = () => {
 
   const handleLiveScoringBack = () => {
     setShowLiveScoring(false);
-    setSelectedMatchId(null);
+    // Don't reset selectedMatchId - keep match state for "Continue Match"
   };
 
   const handleMatchManagementPress = () => {
@@ -281,6 +283,14 @@ const HomeScreen: React.FC = () => {
   const handlePlaying11Back = () => {
     setShowPlaying11(false);
     setShowToss(true);
+  };
+
+  const handleSpectatorPress = () => {
+    setShowSpectator(true);
+  };
+
+  const handleSpectatorBack = () => {
+    setShowSpectator(false);
   };
 
   const handleDemoMode = async () => {
@@ -486,6 +496,15 @@ const HomeScreen: React.FC = () => {
         matchId={selectedMatchId || undefined}
         teamA={matchTeams?.teamA}
         teamB={matchTeams?.teamB}
+      />
+    );
+  }
+
+  if (showSpectator) {
+    return (
+      <SpectatorScreen
+        onBack={handleSpectatorBack}
+        matchId={selectedMatchId || 'demo-match'}
       />
     );
   }
@@ -698,12 +717,21 @@ const HomeScreen: React.FC = () => {
               <Text style={styles.welcomeText}>
                 🎉 Welcome back! Use the profile icon above to manage your account.
               </Text>
-              <Button
-                title="🏏 Start A Match"
-                onPress={handleStartMatchPress}
-                size="large"
-                style={styles.primaryButton}
-              />
+              {selectedMatchId ? (
+                <Button
+                  title="🏏 Continue Match"
+                  onPress={handleLiveScoringPress}
+                  size="large"
+                  style={styles.primaryButton}
+                />
+              ) : (
+                <Button
+                  title="🏏 Start A Match"
+                  onPress={handleStartMatchPress}
+                  size="large"
+                  style={styles.primaryButton}
+                />
+              )}
               <Button
                 title="📊 Live Scoring"
                 onPress={handleLiveScoringPress}
@@ -716,6 +744,14 @@ const HomeScreen: React.FC = () => {
                 size="large"
                 style={styles.secondaryButton}
               />
+              {selectedMatchId && (
+                <Button
+                  title="📊 View Scorecard"
+                  onPress={handleSpectatorPress}
+                  size="large"
+                  style={styles.secondaryButton}
+                />
+              )}
             </View>
           )}
           

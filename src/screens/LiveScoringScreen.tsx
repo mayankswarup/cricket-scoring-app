@@ -11,6 +11,7 @@ import {
 import { COLORS, SIZES, FONTS } from '../constants';
 import { APP_CONFIG, SCORING_CONFIG, UI_CONFIG } from '../config/appConfig';
 import { liveScoringService, Match, BallData as FirebaseBallData } from '../services/liveScoringService';
+import { REAL_CRICKET_TEAMS, getTeamById, getBatsmen, getBowlers } from '../data/realCricketData';
 
 const { width } = Dimensions.get('window');
 
@@ -32,6 +33,15 @@ interface MatchData {
   totalRuns: number;
   wickets: number;
   balls: BallData[];
+  // Real player data
+  currentBatsmen: {
+    striker: { id: string; name: string; runs: number; balls: number; isOut: boolean };
+    nonStriker: { id: string; name: string; runs: number; balls: number; isOut: boolean };
+  };
+  currentBowler: { id: string; name: string; overs: number; wickets: number; runs: number };
+  nextBatsman: { id: string; name: string };
+  team1Players: any[];
+  team2Players: any[];
 }
 
 interface BallData {
@@ -58,6 +68,15 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
     totalRuns: 0,
     wickets: 0,
     balls: [],
+    // Initialize with real players
+    currentBatsmen: {
+      striker: { id: 'rohit-sharma', name: 'Rohit Sharma', runs: 0, balls: 0, isOut: false },
+      nonStriker: { id: 'suryakumar-yadav', name: 'Suryakumar Yadav', runs: 0, balls: 0, isOut: false }
+    },
+    currentBowler: { id: 'jasprit-bumrah', name: 'Jasprit Bumrah', overs: 0, wickets: 0, runs: 0 },
+    nextBatsman: { id: 'tilak-varma', name: 'Tilak Varma' },
+    team1Players: [],
+    team2Players: []
   });
 
   const [isScoring, setIsScoring] = useState(false);
@@ -69,11 +88,59 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
   // Auto-save functionality
   const autoSaveRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Load real players based on team names
+  const loadRealPlayers = () => {
+    const team1Data = REAL_CRICKET_TEAMS.find(team => team.name === matchData.team1);
+    const team2Data = REAL_CRICKET_TEAMS.find(team => team.name === matchData.team2);
+    
+    if (team1Data && team2Data) {
+      const team1Batsmen = getBatsmen(team1Data.id);
+      const team2Batsmen = getBatsmen(team2Data.id);
+      const team1Bowlers = getBowlers(team1Data.id);
+      const team2Bowlers = getBowlers(team2Data.id);
+      
+      setMatchData(prev => ({
+        ...prev,
+        currentBatsmen: {
+          striker: { 
+            id: team1Batsmen[0]?.id || 'player1', 
+            name: team1Batsmen[0]?.name || 'Batsman 1', 
+            runs: 0, 
+            balls: 0, 
+            isOut: false 
+          },
+          nonStriker: { 
+            id: team1Batsmen[1]?.id || 'player2', 
+            name: team1Batsmen[1]?.name || 'Batsman 2', 
+            runs: 0, 
+            balls: 0, 
+            isOut: false 
+          }
+        },
+        currentBowler: { 
+          id: team2Bowlers[0]?.id || 'bowler1', 
+          name: team2Bowlers[0]?.name || 'Bowler 1', 
+          overs: 0, 
+          wickets: 0, 
+          runs: 0 
+        },
+        nextBatsman: { 
+          id: team1Batsmen[2]?.id || 'player3', 
+          name: team1Batsmen[2]?.name || 'Next Batsman' 
+        },
+        team1Players: team1Data.players,
+        team2Players: team2Data.players
+      }));
+    }
+  };
+
   useEffect(() => {
     if (matchId) {
       loadMatchData();
     } else {
       setLoading(false);
+      // Load real players for demo mode
+      loadRealPlayers();
     }
   }, [matchId]);
 
@@ -109,6 +176,15 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
           totalRuns: 0,
           wickets: 0,
           balls: [],
+          // Initialize with default player data
+          currentBatsmen: {
+            striker: { id: 'player1', name: 'Batsman 1', runs: 0, balls: 0, isOut: false },
+            nonStriker: { id: 'player2', name: 'Batsman 2', runs: 0, balls: 0, isOut: false }
+          },
+          currentBowler: { id: 'bowler1', name: 'Bowler 1', overs: 0, wickets: 0, runs: 0 },
+          nextBatsman: { id: 'player3', name: 'Next Batsman' },
+          team1Players: [],
+          team2Players: []
         });
         
         // Load existing balls
@@ -327,6 +403,46 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
             <Text style={styles.scoreText}>{getCurrentScore()}</Text>
             <Text style={styles.runRateText}>RR: {getRunRate()}</Text>
           </View>
+        </View>
+
+        {/* Current Batsmen Display */}
+        <View style={styles.batsmenCard}>
+          <Text style={styles.batsmenTitle}>Current Batsmen</Text>
+          <View style={styles.batsmenInfo}>
+            <View style={styles.batsman}>
+              <Text style={styles.batsmanName}>
+                {matchData.currentBatsmen.striker.name} {matchData.currentBatsmen.striker.isOut ? '(OUT)' : '*'}
+              </Text>
+              <Text style={styles.batsmanScore}>
+                {matchData.currentBatsmen.striker.runs}* ({matchData.currentBatsmen.striker.balls})
+              </Text>
+            </View>
+            <View style={styles.batsman}>
+              <Text style={styles.batsmanName}>
+                {matchData.currentBatsmen.nonStriker.name} {matchData.currentBatsmen.nonStriker.isOut ? '(OUT)' : ''}
+              </Text>
+              <Text style={styles.batsmanScore}>
+                {matchData.currentBatsmen.nonStriker.runs} ({matchData.currentBatsmen.nonStriker.balls})
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Bowler Information */}
+        <View style={styles.bowlerCard}>
+          <Text style={styles.bowlerTitle}>Bowler</Text>
+          <View style={styles.bowlerInfo}>
+            <Text style={styles.bowlerName}>{matchData.currentBowler.name}</Text>
+            <Text style={styles.bowlerStats}>
+              {matchData.currentBowler.overs} overs, {matchData.currentBowler.wickets} wickets, {matchData.currentBowler.runs} runs
+            </Text>
+          </View>
+        </View>
+
+        {/* Next Batsman */}
+        <View style={styles.nextBatsmanCard}>
+          <Text style={styles.nextBatsmanTitle}>Next Batsman</Text>
+          <Text style={styles.nextBatsmanName}>{matchData.nextBatsman.name}</Text>
         </View>
 
         {/* Scoring Buttons */}
@@ -633,6 +749,96 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: UI_CONFIG.TEXT_COLOR,
     fontFamily: FONTS.medium,
+  },
+  // Current Batsmen Styles
+  batsmenCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    padding: SIZES.lg,
+    marginBottom: SIZES.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  batsmenTitle: {
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    color: '#333',
+    marginBottom: SIZES.md,
+  },
+  batsmenInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  batsman: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  batsmanName: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: '#333',
+    marginBottom: SIZES.xs,
+    textAlign: 'center',
+  },
+  batsmanScore: {
+    fontSize: 14,
+    color: '#666',
+    fontFamily: FONTS.medium,
+  },
+  // Bowler Styles
+  bowlerCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    padding: SIZES.lg,
+    marginBottom: SIZES.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  bowlerTitle: {
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    color: '#333',
+    marginBottom: SIZES.sm,
+  },
+  bowlerInfo: {
+    alignItems: 'center',
+  },
+  bowlerName: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: '#333',
+    marginBottom: SIZES.xs,
+  },
+  bowlerStats: {
+    fontSize: 14,
+    color: '#666',
+    fontFamily: FONTS.medium,
+  },
+  // Next Batsman Styles
+  nextBatsmanCard: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: SIZES.lg,
+    marginBottom: SIZES.md,
+    borderLeftWidth: 4,
+    borderLeftColor: '#28a745',
+  },
+  nextBatsmanTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.medium,
+    color: '#666',
+    marginBottom: SIZES.xs,
+  },
+  nextBatsmanName: {
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    color: '#333',
   },
 });
 
