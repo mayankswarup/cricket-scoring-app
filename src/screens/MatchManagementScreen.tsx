@@ -284,22 +284,22 @@ const MatchManagementScreen: React.FC<MatchManagementScreenProps> = ({
                      match.status === 'completed' ? UI_CONFIG.TEXT_COLOR : 
                      UI_CONFIG.WARNING_COLOR }
           ]}>
-            {match.status.toUpperCase()}
+            {match.status?.toUpperCase() || 'UNKNOWN'}
           </Text>
         </View>
       </View>
       
       <View style={styles.matchTeams}>
-        <Text style={styles.teamText}>{match.team1.name}</Text>
+        <Text style={styles.teamText}>{match.team1?.name || 'Team 1'}</Text>
         <Text style={styles.vsText}>VS</Text>
-        <Text style={styles.teamText}>{match.team2.name}</Text>
+        <Text style={styles.teamText}>{match.team2?.name || 'Team 2'}</Text>
       </View>
       
       <View style={styles.matchDetails}>
-        <Text style={styles.detailText}>{match.matchType}</Text>
-        <Text style={styles.detailText}>{match.totalOvers} Overs</Text>
+        <Text style={styles.detailText}>{match.matchType || 'T20'}</Text>
+        <Text style={styles.detailText}>{match.totalOvers || 20} Overs</Text>
         <Text style={styles.detailText}>
-          {new Date(match.createdAt.seconds * 1000).toLocaleDateString()}
+          {match.createdAt ? new Date(match.createdAt.seconds * 1000).toLocaleDateString() : 'Today'}
         </Text>
       </View>
       

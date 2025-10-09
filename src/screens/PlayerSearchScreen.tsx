@@ -3,355 +3,252 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  TextInput,
   TouchableOpacity,
   SafeAreaView,
+  ScrollView,
+  TextInput,
+  FlatList,
   Alert,
 } from 'react-native';
 import { COLORS, SIZES, FONTS } from '../constants';
-import Button from '../components/Button';
-import { PlayerRegistration, PlayerAvailability, MatchSchedule } from '../types';
+import { liveScoringService } from '../services/liveScoringService';
 
-interface PlayerSearchScreenProps {
-  onPlayerSelect: (player: PlayerRegistration) => void;
-  onBack: () => void;
-  matchDate?: string;
-  matchTime?: string;
-  duration?: number;
+interface Player {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  role: 'batsman' | 'bowler' | 'all-rounder' | 'wicket-keeper';
+  city: string;
+  isAvailable: boolean;
+  currentTeam?: string;
 }
 
-const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
-  onPlayerSelect,
-  onBack,
-  matchDate,
-  matchTime,
-  duration = 180, // 3 hours default
+interface PlayerSearchScreenProps {
+  teamId: string;
+  teamName: string;
+  onPlayerAdded: (player: Player) => void;
+  onBack: () => void;
+}
+
+const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({ 
+  teamId, 
+  teamName, 
+  onPlayerAdded, 
+  onBack 
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterRole, setFilterRole] = useState<string>('all');
-  const [filterExperience, setFilterExperience] = useState<string>('all');
-  const [filterLocation, setFilterLocation] = useState<string>('all');
-  const [showAvailableOnly, setShowAvailableOnly] = useState(true);
-  
-  // Mock data - in real app, this would come from API
-  const [allPlayers, setAllPlayers] = useState<PlayerRegistration[]>([]);
-  const [selectedPlayers, setSelectedPlayers] = useState<PlayerRegistration[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
+
+  // Mock player data - in real app, this would come from Firebase
+  const mockPlayers: Player[] = [
+    { id: '1', name: 'Virat Kohli', phoneNumber: '9876543210', role: 'batsman', city: 'Delhi', isAvailable: true },
+    { id: '2', name: 'Rohit Sharma', phoneNumber: '9876543211', role: 'batsman', city: 'Mumbai', isAvailable: true },
+    { id: '3', name: 'MS Dhoni', phoneNumber: '9876543212', role: 'wicket-keeper', city: 'Chennai', isAvailable: false, currentTeam: 'CSK' },
+    { id: '4', name: 'Jasprit Bumrah', phoneNumber: '9876543213', role: 'bowler', city: 'Mumbai', isAvailable: true },
+    { id: '5', name: 'Ravindra Jadeja', phoneNumber: '9876543214', role: 'all-rounder', city: 'Gujarat', isAvailable: true },
+    { id: '6', name: 'KL Rahul', phoneNumber: '9876543215', role: 'batsman', city: 'Bangalore', isAvailable: false, currentTeam: 'LSG' },
+    { id: '7', name: 'Hardik Pandya', phoneNumber: '9876543216', role: 'all-rounder', city: 'Gujarat', isAvailable: true },
+    { id: '8', name: 'Mohammed Shami', phoneNumber: '9876543217', role: 'bowler', city: 'Gujarat', isAvailable: true },
+    { id: '9', name: 'Rishabh Pant', phoneNumber: '9876543218', role: 'wicket-keeper', city: 'Delhi', isAvailable: true },
+    { id: '10', name: 'Shubman Gill', phoneNumber: '9876543219', role: 'batsman', city: 'Gujarat', isAvailable: true },
+  ];
 
   useEffect(() => {
-    // Load mock players
     loadPlayers();
   }, []);
 
-  const loadPlayers = () => {
-    // Mock data - in real app, this would be an API call
-    const mockPlayers: PlayerRegistration[] = [
-      {
-        id: '1',
-        name: 'Virat Kohli',
-        email: 'virat@example.com',
-        phone: '+91-9876543210',
-        password: 'hashed_password',
-        dateOfBirth: '1988-11-05',
-        preferredRole: 'batsman',
-        battingStyle: 'right-handed',
-        experience: 'professional',
-        location: 'Delhi',
-        availability: [],
-        stats: { matches: 100, runs: 5000, wickets: 0, average: 50.0, strikeRate: 120.0 },
-        createdAt: '2024-01-01T00:00:00Z',
-        isActive: true,
-      },
-      {
-        id: '2',
-        name: 'Rohit Sharma',
-        email: 'rohit@example.com',
-        phone: '+91-9876543211',
-        password: 'hashed_password',
-        dateOfBirth: '1987-04-30',
-        preferredRole: 'batsman',
-        battingStyle: 'right-handed',
-        experience: 'professional',
-        location: 'Mumbai',
-        availability: [],
-        stats: { matches: 150, runs: 6000, wickets: 0, average: 45.0, strikeRate: 110.0 },
-        createdAt: '2024-01-01T00:00:00Z',
-        isActive: true,
-      },
-      // Add more mock players...
-    ];
-    setAllPlayers(mockPlayers);
-  };
-
-  const checkPlayerAvailability = (player: PlayerRegistration): boolean => {
-    if (!matchDate || !matchTime) return true;
-    
-    // In real app, this would check against actual match schedules
-    // For now, return true for demo
-    return true;
-  };
-
-  const filteredPlayers = allPlayers.filter(player => {
-    const matchesSearch = player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         player.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         player.location.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesRole = filterRole === 'all' || player.preferredRole === filterRole;
-    const matchesExperience = filterExperience === 'all' || player.experience === filterExperience;
-    const matchesLocation = filterLocation === 'all' || player.location.toLowerCase().includes(filterLocation.toLowerCase());
-    
-    const isAvailable = !showAvailableOnly || checkPlayerAvailability(player);
-    
-    return matchesSearch && matchesRole && matchesExperience && matchesLocation && isAvailable;
-  });
-
-  const handlePlayerSelect = (player: PlayerRegistration) => {
-    if (selectedPlayers.some(p => p.id === player.id)) {
-      setSelectedPlayers(prev => prev.filter(p => p.id !== player.id));
-    } else {
-      setSelectedPlayers(prev => [...prev, player]);
+  const loadPlayers = async () => {
+    try {
+      setLoading(true);
+      // In real app, fetch from Firebase
+      // const firebasePlayers = await liveScoringService.getPlayers();
+      setPlayers(mockPlayers);
+    } catch (error) {
+      console.error('Error loading players:', error);
+      setPlayers(mockPlayers);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleAddSelectedPlayers = () => {
-    if (selectedPlayers.length === 0) {
-      Alert.alert('No Players Selected', 'Please select at least one player to add.');
+  const filteredPlayers = players.filter(player => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      player.name.toLowerCase().includes(query) ||
+      player.phoneNumber.includes(query) ||
+      player.city.toLowerCase().includes(query) ||
+      player.role.toLowerCase().includes(query)
+    );
+  });
+
+  const handlePlayerSelect = (player: Player) => {
+    if (!player.isAvailable) {
+      Alert.alert(
+        'Player Not Available',
+        `${player.name} is currently playing for ${player.currentTeam}. They cannot join another team simultaneously.`
+      );
       return;
     }
     
-    // In real app, this would add players to the team
-    Alert.alert('Success', `${selectedPlayers.length} players added to team!`);
-    onBack();
-  };
-
-  const getRoleIcon = (role: string) => {
-    switch (role) {
-      case 'batsman': return '🏏';
-      case 'bowler': return '⚾';
-      case 'all-rounder': return '🔄';
-      case 'wicket-keeper': return '🧤';
-      default: return '👤';
+    // Toggle selection
+    const isAlreadySelected = selectedPlayers.some(p => p.id === player.id);
+    if (isAlreadySelected) {
+      setSelectedPlayers(selectedPlayers.filter(p => p.id !== player.id));
+    } else {
+      setSelectedPlayers([...selectedPlayers, player]);
     }
   };
 
-  const getExperienceColor = (experience: string) => {
-    switch (experience) {
-      case 'beginner': return '#4CAF50';
-      case 'intermediate': return '#FF9800';
-      case 'advanced': return '#2196F3';
-      case 'professional': return '#9C27B0';
-      default: return COLORS.textSecondary;
+  const handleAddPlayers = async () => {
+    if (selectedPlayers.length === 0) return;
+
+    try {
+      // In real app, add players to team in Firebase
+      // await liveScoringService.addPlayersToTeam(teamId, selectedPlayers.map(p => p.id));
+      
+      const playerNames = selectedPlayers.map(p => p.name).join(', ');
+      console.log(`✅ Added ${selectedPlayers.length} player(s) to ${teamName}: ${playerNames}`);
+      
+      // Call onPlayerAdded for each player
+      selectedPlayers.forEach(player => onPlayerAdded(player));
+      
+      Alert.alert(
+        'Players Added',
+        `${selectedPlayers.length} player(s) have been added to ${teamName}`,
+        [
+          {
+            text: 'Add More',
+            onPress: () => setSelectedPlayers([])
+          },
+          {
+            text: 'Done',
+            onPress: () => onBack()
+          }
+        ]
+      );
+      
+      setSelectedPlayers([]);
+      
+    } catch (error) {
+      console.error('Error adding players:', error);
+      Alert.alert('Error', 'Failed to add players. Please try again.');
     }
   };
 
-  const isPlayerSelected = (player: PlayerRegistration) => {
+  const isPlayerSelected = (player: Player) => {
     return selectedPlayers.some(p => p.id === player.id);
   };
 
+  const renderPlayerCard = ({ item }: { item: Player }) => (
+    <TouchableOpacity
+      style={[
+        styles.playerCard,
+        !item.isAvailable && styles.unavailablePlayerCard,
+        isPlayerSelected(item) && styles.selectedPlayerCard
+      ]}
+      onPress={() => handlePlayerSelect(item)}
+    >
+      <View style={styles.playerInfo}>
+        <Text style={[
+          styles.playerName,
+          !item.isAvailable && styles.unavailableText
+        ]}>
+          {item.name}
+        </Text>
+        <Text style={styles.playerDetails}>
+          📱 {item.phoneNumber} • 🏙️ {item.city}
+        </Text>
+        <Text style={styles.playerRole}>
+          {item.role.charAt(0).toUpperCase() + item.role.slice(1).replace('-', ' ')}
+        </Text>
+        {!item.isAvailable && (
+          <Text style={styles.unavailableText}>
+            ⚠️ Currently playing for {item.currentTeam}
+          </Text>
+        )}
+      </View>
+      <View style={styles.statusIndicator}>
+        {isPlayerSelected(item) ? (
+          <View style={styles.checkmark}>
+            <Text style={styles.checkmarkText}>✓</Text>
+          </View>
+        ) : (
+          <View style={[
+            styles.statusDot,
+            { backgroundColor: item.isAvailable ? COLORS.success : COLORS.error }
+          ]} />
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>🔍 Search Players</Text>
-        <Text style={styles.subtitle}>Find and add players to your team</Text>
+        <TouchableOpacity style={styles.backButton} onPress={onBack}>
+          <Text style={styles.backButtonText}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Add Players</Text>
+        <View style={styles.placeholder} />
       </View>
 
-      {/* Search and Filters */}
+      {/* Team Info */}
+      <View style={styles.teamInfo}>
+        <Text style={styles.teamName}>{teamName}</Text>
+        <Text style={styles.teamSubtext}>Search and add players to your team</Text>
+      </View>
+
+      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by name, email, or location..."
+          placeholder="Search by name, phone, city, or role..."
+          placeholderTextColor={COLORS.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
-        
-        <View style={styles.filtersContainer}>
-          <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Role:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {['all', 'batsman', 'bowler', 'all-rounder', 'wicket-keeper'].map((role) => (
-                <TouchableOpacity
-                  key={role}
-                  style={[
-                    styles.filterChip,
-                    filterRole === role && styles.activeFilterChip,
-                  ]}
-                  onPress={() => setFilterRole(role)}
-                >
-                  <Text style={[
-                    styles.filterChipText,
-                    filterRole === role && styles.activeFilterChipText,
-                  ]}>
-                    {role === 'all' ? 'All' : role.charAt(0).toUpperCase() + role.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Experience:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {['all', 'beginner', 'intermediate', 'advanced', 'professional'].map((exp) => (
-                <TouchableOpacity
-                  key={exp}
-                  style={[
-                    styles.filterChip,
-                    filterExperience === exp && styles.activeFilterChip,
-                  ]}
-                  onPress={() => setFilterExperience(exp)}
-                >
-                  <Text style={[
-                    styles.filterChipText,
-                    filterExperience === exp && styles.activeFilterChipText,
-                  ]}>
-                    {exp === 'all' ? 'All' : exp.charAt(0).toUpperCase() + exp.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          <View style={styles.filterRow}>
-            <TouchableOpacity
-              style={[
-                styles.availabilityToggle,
-                showAvailableOnly && styles.activeAvailabilityToggle,
-              ]}
-              onPress={() => setShowAvailableOnly(!showAvailableOnly)}
-            >
-              <Text style={[
-                styles.availabilityText,
-                showAvailableOnly && styles.activeAvailabilityText,
-              ]}>
-                {showAvailableOnly ? '✅' : '⚪'} Available Only
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       </View>
 
-      {/* Selected Players Summary */}
+      {/* Selected Players Actions */}
       {selectedPlayers.length > 0 && (
-        <View style={styles.selectedSummary}>
-          <Text style={styles.selectedTitle}>
-            Selected Players ({selectedPlayers.length})
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {selectedPlayers.map((player) => (
-              <View key={player.id} style={styles.selectedPlayerChip}>
-                <Text style={styles.selectedPlayerText}>
-                  {getRoleIcon(player.preferredRole)} {player.name}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => handlePlayerSelect(player)}
-                  style={styles.removeButton}
-                >
-                  <Text style={styles.removeButtonText}>×</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
+        <View style={styles.selectedPlayerActions}>
+          <View style={styles.selectedPlayerInfo}>
+            <Text style={styles.selectedPlayerCount}>
+              {selectedPlayers.length} player(s) selected
+            </Text>
+            <Text style={styles.selectedPlayerNames} numberOfLines={1}>
+              {selectedPlayers.map(p => p.name).join(', ')}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={handleAddPlayers}
+          >
+            <Text style={styles.addButtonText}>
+              Add to Team
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 
       {/* Players List */}
-      <ScrollView style={styles.playersList} showsVerticalScrollIndicator={false}>
-        {filteredPlayers.map((player) => {
-          const isSelected = isPlayerSelected(player);
-          const isAvailable = checkPlayerAvailability(player);
-          
-          return (
-            <TouchableOpacity
-              key={player.id}
-              style={[
-                styles.playerCard,
-                isSelected && styles.selectedPlayerCard,
-                !isAvailable && styles.unavailablePlayerCard,
-              ]}
-              onPress={() => handlePlayerSelect(player)}
-            >
-              <View style={styles.playerInfo}>
-                <View style={styles.playerHeader}>
-                  <Text style={styles.playerName}>
-                    {getRoleIcon(player.preferredRole)} {player.name}
-                  </Text>
-                  <View style={styles.playerBadges}>
-                    <View style={[
-                      styles.experienceBadge,
-                      { backgroundColor: getExperienceColor(player.experience) }
-                    ]}>
-                      <Text style={styles.experienceBadgeText}>
-                        {player.experience.toUpperCase()}
-                      </Text>
-                    </View>
-                    {!isAvailable && (
-                      <View style={styles.unavailableBadge}>
-                        <Text style={styles.unavailableBadgeText}>❌</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-                
-                <Text style={styles.playerDetails}>
-                  {player.preferredRole.toUpperCase()} • {player.battingStyle}
-                  {player.bowlingStyle && ` • ${player.bowlingStyle}`}
-                </Text>
-                
-                <Text style={styles.playerLocation}>📍 {player.location}</Text>
-                
-                <View style={styles.playerStats}>
-                  <Text style={styles.statText}>
-                    Matches: {player.stats.matches} | 
-                    Runs: {player.stats.runs} | 
-                    Avg: {player.stats.average}
-                  </Text>
-                  {player.stats.wickets > 0 && (
-                    <Text style={styles.statText}>
-                      Wickets: {player.stats.wickets} | 
-                      SR: {player.stats.strikeRate}
-                    </Text>
-                  )}
-                </View>
-              </View>
-
-              <View style={styles.selectionIndicator}>
-                {isSelected ? (
-                  <Text style={styles.selectedIcon}>✓</Text>
-                ) : (
-                  <View style={styles.unselectedIcon} />
-                )}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-
-        {filteredPlayers.length === 0 && (
-          <View style={styles.noResults}>
-            <Text style={styles.noResultsText}>No players found</Text>
-            <Text style={styles.noResultsSubtext}>
-              Try adjusting your search criteria
-            </Text>
+      <FlatList
+        data={filteredPlayers}
+        renderItem={renderPlayerCard}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.playersList}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No players found</Text>
+            <Text style={styles.emptySubtext}>Try adjusting your search</Text>
           </View>
-        )}
-      </ScrollView>
-
-      {/* Actions */}
-      <View style={styles.actions}>
-        <Button
-          title="Cancel"
-          onPress={onBack}
-          variant="outline"
-          size="medium"
-          style={styles.cancelButton}
-        />
-        <Button
-          title={`Add ${selectedPlayers.length} Players`}
-          onPress={handleAddSelectedPlayers}
-          size="medium"
-          style={styles.addButton}
-          disabled={selectedPlayers.length === 0}
-        />
-      </View>
+        }
+      />
     </SafeAreaView>
   );
 };
@@ -362,250 +259,189 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    padding: SIZES.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SIZES.lg,
+    paddingVertical: SIZES.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  backButton: {
+    padding: SIZES.sm,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontFamily: FONTS.medium,
+    color: COLORS.primary,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+  },
+  placeholder: {
+    width: 60,
+  },
+  teamInfo: {
+    paddingHorizontal: SIZES.lg,
+    paddingVertical: SIZES.md,
     backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: COLORS.lightGray,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  teamName: {
+    fontSize: 20,
+    fontFamily: FONTS.bold,
     color: COLORS.text,
     marginBottom: SIZES.xs,
   },
-  subtitle: {
-    fontSize: 16,
+  teamSubtext: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
     color: COLORS.textSecondary,
   },
   searchContainer: {
-    backgroundColor: COLORS.surface,
-    padding: SIZES.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    paddingHorizontal: SIZES.lg,
+    paddingVertical: SIZES.md,
   },
   searchInput: {
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: SIZES.sm,
-    padding: SIZES.md,
+    borderColor: COLORS.lightGray,
+    borderRadius: SIZES.radius,
+    paddingHorizontal: SIZES.md,
+    paddingVertical: SIZES.sm,
     fontSize: 16,
-    backgroundColor: COLORS.background,
+    fontFamily: FONTS.regular,
     color: COLORS.text,
-    marginBottom: SIZES.md,
   },
-  filtersContainer: {
-    gap: SIZES.md,
-  },
-  filterRow: {
+  selectedPlayerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SIZES.sm,
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
-    minWidth: 80,
-  },
-  filterChip: {
-    paddingHorizontal: SIZES.sm,
-    paddingVertical: SIZES.xs,
-    borderRadius: SIZES.xs,
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginRight: SIZES.xs,
-  },
-  activeFilterChip: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  filterChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  activeFilterChipText: {
-    color: 'white',
-  },
-  availabilityToggle: {
-    paddingHorizontal: SIZES.sm,
-    paddingVertical: SIZES.xs,
-    borderRadius: SIZES.xs,
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  activeAvailabilityToggle: {
-    backgroundColor: COLORS.success,
-    borderColor: COLORS.success,
-  },
-  availabilityText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  activeAvailabilityText: {
-    color: 'white',
-  },
-  selectedSummary: {
-    backgroundColor: COLORS.primary + '10',
-    padding: SIZES.md,
+    justifyContent: 'space-between',
+    paddingHorizontal: SIZES.lg,
+    paddingVertical: SIZES.md,
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: COLORS.lightGray,
   },
-  selectedTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SIZES.sm,
+  selectedPlayerInfo: {
+    flex: 1,
+    marginRight: SIZES.md,
   },
-  selectedPlayerChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SIZES.sm,
-    paddingVertical: SIZES.xs,
-    borderRadius: SIZES.sm,
-    marginRight: SIZES.sm,
+  selectedPlayerCount: {
+    fontSize: 14,
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+    marginBottom: SIZES.xs,
   },
-  selectedPlayerText: {
-    color: 'white',
+  selectedPlayerNames: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: FONTS.regular,
+    color: COLORS.textSecondary,
   },
-  removeButton: {
-    marginLeft: SIZES.xs,
-    paddingHorizontal: SIZES.xs,
+  addButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SIZES.lg,
+    paddingVertical: SIZES.sm,
+    borderRadius: SIZES.radius,
   },
-  removeButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+  disabledButton: {
+    backgroundColor: COLORS.lightGray,
+  },
+  addButtonText: {
+    fontSize: 14,
+    fontFamily: FONTS.bold,
+    color: COLORS.white,
+  },
+  disabledButtonText: {
+    color: COLORS.textSecondary,
   },
   playersList: {
-    flex: 1,
     padding: SIZES.lg,
   },
   playerCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: SIZES.radius,
+    padding: SIZES.lg,
+    marginBottom: SIZES.md,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    padding: SIZES.md,
-    marginBottom: SIZES.sm,
-    borderRadius: SIZES.sm,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+  },
+  unavailablePlayerCard: {
+    backgroundColor: COLORS.lightGray,
+    opacity: 0.6,
   },
   selectedPlayerCard: {
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '10',
-  },
-  unavailablePlayerCard: {
-    opacity: 0.6,
-    backgroundColor: COLORS.error + '10',
+    borderWidth: 2,
   },
   playerInfo: {
     flex: 1,
   },
-  playerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SIZES.xs,
-  },
   playerName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontFamily: FONTS.bold,
     color: COLORS.text,
-    flex: 1,
-  },
-  playerBadges: {
-    flexDirection: 'row',
-    gap: SIZES.xs,
-  },
-  experienceBadge: {
-    paddingHorizontal: SIZES.sm,
-    paddingVertical: SIZES.xs,
-    borderRadius: SIZES.xs,
-  },
-  experienceBadgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  unavailableBadge: {
-    backgroundColor: COLORS.error,
-    paddingHorizontal: SIZES.sm,
-    paddingVertical: SIZES.xs,
-    borderRadius: SIZES.xs,
-  },
-  unavailableBadgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
+    marginBottom: SIZES.xs,
   },
   playerDetails: {
-    fontSize: 14,
+    fontSize: 12,
+    fontFamily: FONTS.regular,
     color: COLORS.textSecondary,
     marginBottom: SIZES.xs,
   },
-  playerLocation: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginBottom: SIZES.xs,
+  playerRole: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.primary,
+    textTransform: 'capitalize',
   },
-  playerStats: {
+  unavailableText: {
+    color: COLORS.error,
+    fontSize: 12,
+    fontFamily: FONTS.medium,
     marginTop: SIZES.xs,
   },
-  statText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginBottom: 2,
-  },
-  selectionIndicator: {
+  statusIndicator: {
     marginLeft: SIZES.md,
   },
-  selectedIcon: {
-    fontSize: 24,
-    color: COLORS.primary,
-    fontWeight: 'bold',
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
-  unselectedIcon: {
+  checkmark: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-  },
-  noResults: {
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
-    padding: SIZES.xl,
+    justifyContent: 'center',
   },
-  noResultsText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
+  checkmarkText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: SIZES.xl,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontFamily: FONTS.medium,
+    color: COLORS.textSecondary,
     marginBottom: SIZES.sm,
   },
-  noResultsSubtext: {
+  emptySubtext: {
     fontSize: 14,
+    fontFamily: FONTS.regular,
     color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  actions: {
-    flexDirection: 'row',
-    padding: SIZES.lg,
-    backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    gap: SIZES.md,
-  },
-  cancelButton: {
-    flex: 1,
-  },
-  addButton: {
-    flex: 1,
   },
 });
 

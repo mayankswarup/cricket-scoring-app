@@ -60,7 +60,7 @@ export interface Innings {
   overs: number;
   balls: number;
   runRate: number;
-  balls: BallData[];
+  ballEvents: BallData[];
   isCompleted: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -137,6 +137,7 @@ class LiveScoringService {
 
   async updateMatch(matchId: string, updates: Partial<Match>): Promise<void> {
     try {
+      console.log('📝 Updating match:', matchId, 'with updates:', updates);
       const matchRef = doc(this.matchesCollection, matchId);
       await updateDoc(matchRef, {
         ...updates,
@@ -145,7 +146,9 @@ class LiveScoringService {
       console.log('✅ Match updated successfully:', matchId);
     } catch (error) {
       console.error('❌ Error updating match:', error);
-      throw new Error(APP_CONFIG.ERROR_MESSAGES.SAVE_ERROR);
+      console.error('❌ Firebase error details:', error);
+      // Re-throw the original error so we can see what actually failed
+      throw error;
     }
   }
 
@@ -355,17 +358,37 @@ class LiveScoringService {
 
   async getMatchBalls(matchId: string): Promise<BallData[]> {
     try {
+      console.log(`🏏 Getting balls for match: ${matchId}`);
       const scoresRef = collection(db, `${APP_CONFIG.FIREBASE.COLLECTIONS.MATCHES}/${matchId}/balls`);
       const q = query(scoresRef, orderBy('timestamp', 'asc'));
       const querySnapshot = await getDocs(q);
       
-      return querySnapshot.docs.map(doc => ({
+      const balls = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as BallData[];
+      
+      console.log(`🏏 Retrieved ${balls.length} balls for match ${matchId}`);
+      if (balls.length > 0) {
+        console.log(`🏏 Sample ball:`, balls[0]);
+      } else {
+        console.log(`🏏 No balls found for match ${matchId} - checking if collection exists`);
+        // Try to get the match document to see if it exists
+        const match = await this.getMatch(matchId);
+        if (match) {
+          console.log(`🏏 Match exists but no balls found:`, match);
+        } else {
+          console.log(`🏏 Match ${matchId} not found`);
+        }
+      }
+      
+      return balls;
     } catch (error) {
       console.error('❌ Error getting match balls:', error);
-      throw new Error(APP_CONFIG.ERROR_MESSAGES.LOAD_ERROR);
+      console.error('❌ Match ID:', matchId);
+      console.error('❌ Collection path:', `${APP_CONFIG.FIREBASE.COLLECTIONS.MATCHES}/${matchId}/balls`);
+      // Return empty array instead of throwing error to prevent Match History from failing
+      return [];
     }
   }
 
@@ -452,6 +475,188 @@ class LiveScoringService {
       }
     } catch (error) {
       console.error('❌ Error syncing offline data:', error);
+    }
+  }
+
+  // Get all finished matches for history
+  async getFinishedMatches(): Promise<Match[]> {
+    try {
+      const matchesRef = collection(db, APP_CONFIG.FIREBASE.COLLECTIONS.MATCHES);
+      // First get all matches, then filter in JavaScript to avoid index issues
+      const querySnapshot = await getDocs(matchesRef);
+      const allMatches = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Match));
+      
+      // Filter completed matches and sort by date
+      const finishedMatches = allMatches
+        .filter(match => match.status === 'completed')
+        .sort((a, b) => {
+          const dateA = a.updatedAt ? a.updatedAt.toMillis() : (a.createdAt ? a.createdAt.toMillis() : 0);
+          const dateB = b.updatedAt ? b.updatedAt.toMillis() : (b.createdAt ? b.createdAt.toMillis() : 0);
+          return dateB - dateA; // Most recent first
+        });
+      
+      console.log('📚 Found finished matches:', finishedMatches.length);
+      return finishedMatches;
+    } catch (error) {
+      console.error('❌ Error getting finished matches:', error);
+      return [];
+    }
+  }
+
+  // Team Management Functions
+  async createTeam(teamData: { name: string; shortName: string; city: string; createdBy: string }): Promise<string> {
+    try {
+      const teamRef = await addDoc(collection(db, 'teams'), {
+        ...teamData,
+        createdAt: serverTimestamp(),
+        admins: [teamData.createdBy], // Creator is admin by default
+        players: [], // Empty players array initially
+      });
+      
+      console.log('✅ Team created with ID:', teamRef.id);
+      return teamRef.id;
+    } catch (error) {
+      console.error('❌ Error creating team:', error);
+      throw error;
+    }
+  }
+
+  async getTeams(): Promise<any[]> {
+    try {
+      const teamsSnapshot = await getDocs(collection(db, 'teams'));
+      return teamsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+    } catch (error) {
+      console.error('❌ Error fetching teams:', error);
+      throw error;
+    }
+  }
+
+  async getTeamById(teamId: string): Promise<any> {
+    try {
+      const teamDoc = await getDoc(doc(db, 'teams', teamId));
+      if (!teamDoc.exists()) {
+        throw new Error('Team not found');
+      }
+      return { id: teamDoc.id, ...teamDoc.data() };
+    } catch (error) {
+      console.error('❌ Error fetching team:', error);
+      throw error;
+    }
+  }
+
+  // Admin Management Functions
+  async isUserAdmin(userPhoneNumber: string, teamId: string): Promise<boolean> {
+    try {
+      const teamDoc = await getDoc(doc(db, 'teams', teamId));
+      if (!teamDoc.exists()) {
+        console.log('❌ Team not found:', teamId);
+        return false;
+      }
+
+      const teamData = teamDoc.data();
+      const admins = teamData.admins || [];
+      
+      console.log('👑 Checking admin status for', userPhoneNumber, 'in team', teamId, ':', admins.includes(userPhoneNumber));
+      return admins.includes(userPhoneNumber);
+    } catch (error) {
+      console.error('❌ Error checking admin status:', error);
+      return false;
+    }
+  }
+
+  async addTeamAdmin(teamId: string, adminPhoneNumber: string): Promise<boolean> {
+    try {
+      const teamRef = doc(db, 'teams', teamId);
+      const teamDoc = await getDoc(teamRef);
+      
+      if (!teamDoc.exists()) {
+        console.log('❌ Team not found:', teamId);
+        return false;
+      }
+
+      const teamData = teamDoc.data();
+      const currentAdmins = teamData.admins || [];
+      
+      if (!currentAdmins.includes(adminPhoneNumber)) {
+        await updateDoc(teamRef, {
+          admins: [...currentAdmins, adminPhoneNumber]
+        });
+        console.log('✅ Added admin:', adminPhoneNumber, 'to team:', teamId);
+        return true;
+      }
+      
+      console.log('ℹ️ User already admin:', adminPhoneNumber);
+      return true;
+    } catch (error) {
+      console.error('❌ Error adding team admin:', error);
+      return false;
+    }
+  }
+
+  async removeTeamAdmin(teamId: string, adminPhoneNumber: string): Promise<boolean> {
+    try {
+      const teamRef = doc(db, 'teams', teamId);
+      const teamDoc = await getDoc(teamRef);
+      
+      if (!teamDoc.exists()) {
+        console.log('❌ Team not found:', teamId);
+        return false;
+      }
+
+      const teamData = teamDoc.data();
+      const currentAdmins = teamData.admins || [];
+      
+      if (currentAdmins.includes(adminPhoneNumber)) {
+        const updatedAdmins = currentAdmins.filter((admin: string) => admin !== adminPhoneNumber);
+        await updateDoc(teamRef, {
+          admins: updatedAdmins
+        });
+        console.log('✅ Removed admin:', adminPhoneNumber, 'from team:', teamId);
+        return true;
+      }
+      
+      console.log('ℹ️ User not an admin:', adminPhoneNumber);
+      return true;
+    } catch (error) {
+      console.error('❌ Error removing team admin:', error);
+      return false;
+    }
+  }
+
+  async getTeamAdmins(teamId: string): Promise<string[]> {
+    try {
+      const teamDoc = await getDoc(doc(db, 'teams', teamId));
+      if (!teamDoc.exists()) {
+        console.log('❌ Team not found:', teamId);
+        return [];
+      }
+
+      const teamData = teamDoc.data();
+      return teamData.admins || [];
+    } catch (error) {
+      console.error('❌ Error getting team admins:', error);
+      return [];
+    }
+  }
+
+  async setTeamCreatorAsAdmin(teamId: string, creatorPhoneNumber: string): Promise<boolean> {
+    try {
+      const teamRef = doc(db, 'teams', teamId);
+      await updateDoc(teamRef, {
+        admins: [creatorPhoneNumber],
+        createdBy: creatorPhoneNumber
+      });
+      console.log('✅ Set team creator as admin:', creatorPhoneNumber, 'for team:', teamId);
+      return true;
+    } catch (error) {
+      console.error('❌ Error setting team creator as admin:', error);
+      return false;
     }
   }
 }
