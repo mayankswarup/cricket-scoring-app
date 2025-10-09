@@ -28,6 +28,7 @@ interface SideDrawerProps {
   onProfilePress: () => void;
   onLogout: () => void;
   onTossPress?: () => void;
+  onNotificationTestPress?: () => void;
 }
 
 const SideDrawer: React.FC<SideDrawerProps> = ({
@@ -37,6 +38,7 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
   onProfilePress,
   onLogout,
   onTossPress,
+  onNotificationTestPress,
 }) => {
   const menuItems: MenuItem[] = [
     {
@@ -78,6 +80,18 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
         onTossPress?.();
       },
     },
+    // Notifications - Skipped for now (requires dev build for iOS)
+    // {
+    //   id: 'notifications',
+    //   label: 'Test Notifications',
+    //   icon: '🔔',
+    //   onPress: () => {
+    //     onClose();
+    //     onNotificationTestPress?.();
+    //   },
+    //   badge: 'TEST',
+    //   badgeColor: COLORS.primary,
+    // },
     {
       id: 'mycricket',
       label: 'My Cricket',
