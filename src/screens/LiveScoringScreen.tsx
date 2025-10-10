@@ -117,6 +117,21 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminLoading, setAdminLoading] = useState(true);
 
+  // Edit Lock Management - Prevent multiple admins from editing simultaneously
+  const [editLock, setEditLock] = useState<{
+    isLocked: boolean;
+    lockedBy: string | null;
+    lockedByName: string | null;
+    lockedAt: number | null;
+  }>({
+    isLocked: false,
+    lockedBy: null,
+    lockedByName: null,
+    lockedAt: null,
+  });
+  const [hasEditAccess, setHasEditAccess] = useState(false);
+  const lockCheckInterval = useRef<NodeJS.Timeout | null>(null);
+
   // Auto-save functionality
   const autoSaveRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -228,6 +243,102 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
       loadedMatchIdRef.current = null;
     }
   }, [matchId]);
+
+  // Temporary function to make current user admin for testing
+  const makeMeAdmin = async () => {
+    if (!user || !matchId) {
+      Alert.alert('Error', 'User or match not found');
+      return;
+    }
+
+    try {
+      // For testing, we'll directly set the user as admin in the match document
+      // This bypasses the team-based admin system for now
+      console.log('🔑 Making user admin for testing:', user.phoneNumber);
+      setIsAdmin(true);
+      Alert.alert('Success', 'You are now an admin! Click "Start Scoring" to begin editing.');
+    } catch (error) {
+      console.error('Error making admin:', error);
+      Alert.alert('Error', 'Failed to make you admin');
+    }
+  };
+
+  // Lock management functions
+  const requestEditAccess = async () => {
+    if (!user || !matchId) return;
+
+    const success = await liveScoringService.acquireEditLock(
+      matchId,
+      user.phoneNumber,
+      user.name || `User ${user.phoneNumber}`
+    );
+
+    if (success) {
+      setHasEditAccess(true);
+      setIsScoring(true);
+      Alert.alert('✅ Edit Access Granted', 'You can now edit scores. The match is locked for other admins.');
+    } else {
+      Alert.alert(
+        '🔒 Match Locked',
+        `${editLock.lockedByName} is currently editing. Please wait for them to finish.`,
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const releaseEditAccess = async () => {
+    if (!user || !matchId) return;
+
+    await liveScoringService.releaseEditLock(matchId, user.phoneNumber);
+    setHasEditAccess(false);
+    setIsScoring(false);
+  };
+
+  // Subscribe to lock changes in real-time
+  useEffect(() => {
+    if (!matchId) return;
+
+    const unsubscribe = liveScoringService.subscribeToEditLock(matchId, (lock) => {
+      setEditLock(lock);
+
+      // Check if current user has edit access
+      if (user && lock.lockedBy === user.phoneNumber) {
+        setHasEditAccess(true);
+      } else if (user && lock.lockedBy !== user.phoneNumber && lock.isLocked) {
+        // Someone else is editing
+        setHasEditAccess(false);
+        setIsScoring(false);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [matchId, user]);
+
+  // Renew lock every 2 minutes while editing
+  useEffect(() => {
+    if (hasEditAccess && matchId && user) {
+      lockCheckInterval.current = setInterval(() => {
+        liveScoringService.renewEditLock(matchId, user.phoneNumber);
+      }, 2 * 60 * 1000); // Renew every 2 minutes
+
+      return () => {
+        if (lockCheckInterval.current) {
+          clearInterval(lockCheckInterval.current);
+        }
+      };
+    }
+  }, [hasEditAccess, matchId, user]);
+
+  // Release lock when component unmounts
+  useEffect(() => {
+    return () => {
+      if (hasEditAccess && matchId && user) {
+        liveScoringService.releaseEditLock(matchId, user.phoneNumber);
+      }
+    };
+  }, [hasEditAccess, matchId, user]);
 
   // Check admin status when user or matchId changes
   useEffect(() => {
@@ -936,8 +1047,8 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
           <Text style={styles.nextBatsmanName}>{matchData.nextBatsman.name}</Text>
         </View>
 
-        {/* Scoring Buttons - Admin Only */}
-        {isAdmin ? (
+        {/* Scoring Buttons - Admin with Edit Access Only */}
+        {isAdmin && hasEditAccess ? (
           <View style={styles.scoringSection}>
             <Text style={styles.sectionTitle}>Score Runs</Text>
             <View style={styles.runsGrid}>
@@ -960,7 +1071,42 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
               ))}
             </View>
           </View>
-        ) : (
+        ) : isAdmin && !hasEditAccess ? (
+          <View style={styles.viewerMessage}>
+            {editLock.isLocked && editLock.lockedBy !== user?.phoneNumber ? (
+              <>
+                <Text style={styles.lockStatusIcon}>🔒</Text>
+                <Text style={styles.viewerMessageText}>
+                  Match is currently locked
+                </Text>
+                <Text style={styles.viewerMessageSubtext}>
+                  {editLock.lockedByName} is editing scores right now.
+                </Text>
+                <Text style={styles.viewerMessageSubtext}>
+                  Please wait for them to finish or try again in a few minutes.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.lockStatusIcon}>✋</Text>
+                <Text style={styles.viewerMessageText}>
+                  Ready to start scoring?
+                </Text>
+                <Text style={styles.viewerMessageSubtext}>
+                  Click below to acquire edit access and lock the match.
+                </Text>
+                <TouchableOpacity 
+                  style={styles.startScoringButton} 
+                  onPress={requestEditAccess}
+                >
+                  <Text style={styles.startScoringButtonText}>
+                    🏏 Start Scoring
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        ) : !isAdmin ? (
           <View style={styles.viewerMessage}>
             <Text style={styles.viewerMessageText}>
               👀 You are viewing this match. Only admins can score runs.
@@ -968,11 +1114,36 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({ onBack, matchId, 
             <Text style={styles.viewerMessageSubtext}>
               Contact an admin to get scoring access.
             </Text>
+            <TouchableOpacity 
+              style={styles.makeAdminButton} 
+              onPress={makeMeAdmin}
+            >
+              <Text style={styles.makeAdminButtonText}>
+                🔑 Make Me Admin (Testing)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* Stop Scoring Button - For admin who is currently editing */}
+        {isAdmin && hasEditAccess && (
+          <View style={styles.stopScoringSection}>
+            <Text style={styles.editingIndicator}>
+              ✅ You are editing • Match is locked for other admins
+            </Text>
+            <TouchableOpacity 
+              style={styles.stopScoringButton} 
+              onPress={releaseEditAccess}
+            >
+              <Text style={styles.stopScoringButtonText}>
+                🛑 Stop Scoring & Release Lock
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* Action Buttons - Admin Only */}
-        {isAdmin && (
+        {/* Action Buttons - Admin Only with Edit Access */}
+        {isAdmin && hasEditAccess && (
           <View style={styles.actionSection}>
             <TouchableOpacity style={styles.actionButton} onPress={handleWicketPress}>
               <Text style={styles.actionButtonText}>Wicket</Text>
@@ -1480,6 +1651,65 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: FONTS.regular,
     color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  makeAdminButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: SIZES.md,
+    paddingHorizontal: SIZES.lg,
+    borderRadius: SIZES.radius,
+    marginTop: SIZES.md,
+  },
+  makeAdminButtonText: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.white,
+    textAlign: 'center',
+  },
+  // Lock Status Styles
+  lockStatusIcon: {
+    fontSize: 48,
+    textAlign: 'center',
+    marginBottom: SIZES.md,
+  },
+  startScoringButton: {
+    backgroundColor: COLORS.success,
+    paddingVertical: SIZES.md,
+    paddingHorizontal: SIZES.lg,
+    borderRadius: SIZES.radius,
+    marginTop: SIZES.md,
+  },
+  startScoringButtonText: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.white,
+    textAlign: 'center',
+  },
+  stopScoringSection: {
+    backgroundColor: COLORS.surface,
+    padding: SIZES.md,
+    borderRadius: SIZES.radius,
+    margin: SIZES.md,
+    borderWidth: 2,
+    borderColor: COLORS.success,
+  },
+  editingIndicator: {
+    fontSize: 14,
+    fontFamily: FONTS.medium,
+    color: COLORS.success,
+    textAlign: 'center',
+    marginBottom: SIZES.sm,
+  },
+  stopScoringButton: {
+    backgroundColor: COLORS.error,
+    paddingVertical: SIZES.sm,
+    paddingHorizontal: SIZES.md,
+    borderRadius: SIZES.radius,
+  },
+  stopScoringButtonText: {
+    fontSize: 14,
+    fontFamily: FONTS.medium,
+    color: COLORS.white,
     textAlign: 'center',
   },
 });

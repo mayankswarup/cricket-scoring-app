@@ -659,6 +659,141 @@ class LiveScoringService {
       return false;
     }
   }
+
+  // ==================== EDIT LOCK MANAGEMENT ====================
+  // Prevents multiple admins from editing scores simultaneously
+
+  async acquireEditLock(matchId: string, adminPhone: string, adminName: string): Promise<boolean> {
+    try {
+      const matchRef = doc(db, 'matches', matchId);
+      const matchDoc = await getDoc(matchRef);
+      
+      if (!matchDoc.exists()) {
+        console.log('❌ Match not found for lock:', matchId);
+        return false;
+      }
+
+      const matchData = matchDoc.data();
+      const currentLock = matchData.editLock;
+      const now = Date.now();
+
+      // Check if lock exists and is still valid (not expired)
+      if (currentLock?.lockedBy) {
+        const lockAge = now - currentLock.lockedAt;
+        const LOCK_TIMEOUT = 5 * 60 * 1000; // 5 minutes timeout
+
+        // If lock is still valid and held by someone else
+        if (lockAge < LOCK_TIMEOUT && currentLock.lockedBy !== adminPhone) {
+          console.log('❌ Edit lock held by:', currentLock.lockedByName);
+          return false;
+        }
+      }
+
+      // Acquire or renew lock
+      await updateDoc(matchRef, {
+        editLock: {
+          isLocked: true,
+          lockedBy: adminPhone,
+          lockedByName: adminName,
+          lockedAt: now,
+        },
+        updatedAt: serverTimestamp(),
+      });
+
+      console.log('✅ Edit lock acquired by:', adminName);
+      return true;
+    } catch (error) {
+      console.error('❌ Error acquiring edit lock:', error);
+      return false;
+    }
+  }
+
+  async releaseEditLock(matchId: string, adminPhone: string): Promise<boolean> {
+    try {
+      const matchRef = doc(db, 'matches', matchId);
+      const matchDoc = await getDoc(matchRef);
+      
+      if (!matchDoc.exists()) {
+        return false;
+      }
+
+      const matchData = matchDoc.data();
+      const currentLock = matchData.editLock;
+
+      // Only release if this admin holds the lock
+      if (currentLock?.lockedBy === adminPhone) {
+        await updateDoc(matchRef, {
+          editLock: {
+            isLocked: false,
+            lockedBy: null,
+            lockedByName: null,
+            lockedAt: null,
+          },
+          updatedAt: serverTimestamp(),
+        });
+        console.log('✅ Edit lock released by:', adminPhone);
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('❌ Error releasing edit lock:', error);
+      return false;
+    }
+  }
+
+  async renewEditLock(matchId: string, adminPhone: string): Promise<boolean> {
+    try {
+      const matchRef = doc(db, 'matches', matchId);
+      const matchDoc = await getDoc(matchRef);
+      
+      if (!matchDoc.exists()) {
+        return false;
+      }
+
+      const matchData = matchDoc.data();
+      const currentLock = matchData.editLock;
+
+      // Only renew if this admin holds the lock
+      if (currentLock?.lockedBy === adminPhone) {
+        await updateDoc(matchRef, {
+          'editLock.lockedAt': Date.now(),
+          updatedAt: serverTimestamp(),
+        });
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('❌ Error renewing edit lock:', error);
+      return false;
+    }
+  }
+
+  subscribeToEditLock(
+    matchId: string, 
+    onLockChange: (lock: {
+      isLocked: boolean;
+      lockedBy: string | null;
+      lockedByName: string | null;
+      lockedAt: number | null;
+    }) => void
+  ) {
+    const matchRef = doc(db, 'matches', matchId);
+    
+    return onSnapshot(matchRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        const lock = data.editLock || {
+          isLocked: false,
+          lockedBy: null,
+          lockedByName: null,
+          lockedAt: null,
+        };
+        onLockChange(lock);
+      }
+    });
+  }
 }
 
 export const liveScoringService = new LiveScoringService();

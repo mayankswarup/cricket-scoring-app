@@ -34,6 +34,7 @@ import LiveScoringScreen from './LiveScoringScreen';
 import MatchManagementScreen from './MatchManagementScreen';
 import StartMatchScreen from './StartMatchScreen';
 import Playing11Screen from './Playing11Screen';
+import MatchSetupScreen from './MatchSetupScreen';
 import SpectatorScreen from './SpectatorScreen';
 import { MatchHistoryScreen } from './MatchHistoryScreen';
 import MatchDetailsModal from '../components/MatchDetailsModal';
@@ -148,6 +149,7 @@ const HomeScreen: React.FC = () => {
   const [showMatchManagement, setShowMatchManagement] = useState(false);
   const [showStartMatch, setShowStartMatch] = useState(false);
   const [showPlaying11, setShowPlaying11] = useState(false);
+  const [showMatchSetup, setShowMatchSetup] = useState(false);
   const [showSpectator, setShowSpectator] = useState(false);
   const [showMatchHistory, setShowMatchHistory] = useState(false);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
@@ -399,7 +401,8 @@ const HomeScreen: React.FC = () => {
   };
 
   const handleStartMatchPress = () => {
-    setShowTeamSelection(true);
+    console.log('🏏 Start Match pressed - showing StartMatchScreen');
+    setShowStartMatch(true);
   };
 
   const handleStartMatchBack = () => {
@@ -463,7 +466,17 @@ const HomeScreen: React.FC = () => {
     setShowPlaying11(true);
   };
 
-  const handlePlaying11Complete = async () => {
+  const handlePlaying11Complete = () => {
+    setShowPlaying11(false);
+    setShowMatchSetup(true);
+  };
+
+  const handlePlaying11Back = () => {
+    setShowPlaying11(false);
+    setShowToss(true);
+  };
+
+  const handleMatchSetupComplete = async () => {
     // Use the session match ID (should already be set)
     const matchId = selectedMatchId || sessionMatchId;
     console.log('🏏 Using match ID for live scoring:', matchId);
@@ -489,13 +502,13 @@ const HomeScreen: React.FC = () => {
       console.error('❌ Error creating match:', error);
     }
     
-    setShowPlaying11(false);
+    setShowMatchSetup(false);
     setShowLiveScoring(true);
   };
 
-  const handlePlaying11Back = () => {
-    setShowPlaying11(false);
-    setShowToss(true);
+  const handleMatchSetupBack = () => {
+    setShowMatchSetup(false);
+    setShowPlaying11(true);
   };
 
   const handleSpectatorPress = () => {
@@ -869,11 +882,29 @@ const HomeScreen: React.FC = () => {
     );
   }
 
+  if (showMatchSetup) {
+    return (
+      <MatchSetupScreen
+        teamA={matchTeams?.teamA || 'Team A'}
+        teamB={matchTeams?.teamB || 'Team B'}
+        tossWinner={tossResult?.winner || 'Team A'}
+        tossDecision={tossResult?.decision || 'Batting'}
+        onBack={handleMatchSetupBack}
+        onStartMatch={handleMatchSetupComplete}
+      />
+    );
+  }
+
   if (showStartMatch) {
+    console.log('🏏 Rendering StartMatchScreen');
     return (
       <StartMatchScreen
         onBack={handleStartMatchBack}
         onNext={handleStartMatchNext}
+        onCreateTeam={() => {
+          setShowStartMatch(false);
+          setShowMatchManagement(true);
+        }}
       />
     );
   }

@@ -74,13 +74,17 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     }
   };
 
-  const isAdminForTeam = async (teamId: string): Promise<boolean> => {
+  const isAdminForTeam = async (matchId: string): Promise<boolean> => {
     if (!user) return false;
     
     try {
-      // Check if user is admin for this team
-      const { liveScoringService } = await import('../services/liveScoringService');
-      return await liveScoringService.isUserAdmin(user.phoneNumber, teamId);
+      // For now, we'll use a simple approach for testing
+      // In production, this would check the match document for admin list
+      console.log('🔍 Checking admin status for user:', user.phoneNumber, 'in match:', matchId);
+      
+      // For testing purposes, we'll return false initially
+      // The user can click "Make Me Admin" button to become admin
+      return false;
     } catch (error) {
       console.error('Error checking admin status:', error);
       return false;

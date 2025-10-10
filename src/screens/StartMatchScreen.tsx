@@ -17,9 +17,10 @@ import { liveScoringService } from '../services/liveScoringService';
 interface StartMatchScreenProps {
   onBack: () => void;
   onNext: (teamA: string, teamB: string) => void;
+  onCreateTeam?: () => void;
 }
 
-const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext }) => {
+const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onCreateTeam }) => {
   const [selectedTeamA, setSelectedTeamA] = useState<string>('');
   const [selectedTeamB, setSelectedTeamB] = useState<string>('');
   const [showTeamModal, setShowTeamModal] = useState(false);
@@ -252,6 +253,20 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext }) =
                 autoFocus
               />
             </View>
+            
+            {/* Create New Team Button */}
+            {onCreateTeam && (
+              <TouchableOpacity 
+                style={styles.createTeamButton}
+                onPress={() => {
+                  setShowTeamModal(false);
+                  onCreateTeam();
+                }}
+              >
+                <Text style={styles.createTeamIcon}>➕</Text>
+                <Text style={styles.createTeamText}>Create New Team</Text>
+              </TouchableOpacity>
+            )}
             
             <ScrollView style={styles.teamList}>
               {filteredTeams.length === 0 ? (
@@ -542,6 +557,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: '#e0e0e0',
+  },
+  createTeamButton: {
+    backgroundColor: COLORS.primary,
+    marginHorizontal: SIZES.lg,
+    marginBottom: SIZES.md,
+    paddingVertical: SIZES.md,
+    paddingHorizontal: SIZES.lg,
+    borderRadius: SIZES.radius,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createTeamIcon: {
+    fontSize: 20,
+    marginRight: SIZES.sm,
+  },
+  createTeamText: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.white,
   },
   teamList: {
     flex: 1,
