@@ -6,10 +6,7 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
-    "build:web": "expo export -p web",
-    "build": "echo 'Simple web version ready for GitHub Pages!'",
-    "deploy": "git add . && git commit -m 'Deploy web version' && git push"
+    "web": "expo start --web"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -22,19 +19,16 @@
     "expo-notifications": "^0.32.12",
     "expo-status-bar": "~3.0.8",
     "firebase": "^12.3.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
     "react-native": "0.81.4",
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
-    "typescript": "~5.9.2"
-  },
-  "engines": {
-    "node": "20.x"
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
+    "typescript": "~5.3.3"
   },
   "private": true
 }
