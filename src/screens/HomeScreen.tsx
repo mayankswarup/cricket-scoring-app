@@ -156,6 +156,12 @@ const HomeScreen: React.FC = () => {
   const [sessionMatchId, setSessionMatchId] = useState<string | null>(null);
   const [matchTeams, setMatchTeams] = useState<{teamA: string, teamB: string} | null>(null);
   const [tossResult, setTossResult] = useState<{winner: string, decision: string} | null>(null);
+  const [matchSetupData, setMatchSetupData] = useState<{
+    battingOrder: string[];
+    bowlingOrder: string[];
+    teamAPlayers: any[];
+    teamBPlayers: any[];
+  } | null>(null);
   
   // User and Admin Management
   const { user, logout } = useUser();
@@ -476,18 +482,27 @@ const HomeScreen: React.FC = () => {
     setShowToss(true);
   };
 
-  const handleMatchSetupComplete = async () => {
+  const handleMatchSetupComplete = async (setupData: {
+    battingOrder: string[];
+    bowlingOrder: string[];
+    teamAPlayers: any[];
+    teamBPlayers: any[];
+  }) => {
+    // Store the setup data
+    setMatchSetupData(setupData);
+    
     // Use the session match ID (should already be set)
     const matchId = selectedMatchId || sessionMatchId;
     console.log('🏏 Using match ID for live scoring:', matchId);
+    console.log('🏏 Match setup data:', setupData);
     
     // Create the match in Firebase BEFORE going to live scoring
     try {
       const { liveScoringService } = await import('../services/liveScoringService');
       const createdMatchId = await liveScoringService.createMatch({
         name: `${matchTeams?.teamA || 'Team A'} vs ${matchTeams?.teamB || 'Team B'}`,
-        team1: { id: 'team1', name: matchTeams?.teamA || 'Team A', players: [] },
-        team2: { id: 'team2', name: matchTeams?.teamB || 'Team B', players: [] },
+        team1: { id: 'team1', name: matchTeams?.teamA || 'Team A', players: setupData.teamAPlayers },
+        team2: { id: 'team2', name: matchTeams?.teamB || 'Team B', players: setupData.teamBPlayers },
         matchType: 'T20',
         totalOvers: 20,
         currentInnings: 1,
