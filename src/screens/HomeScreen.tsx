@@ -38,6 +38,8 @@ import SpectatorScreen from './SpectatorScreen';
 import { MatchHistoryScreen } from './MatchHistoryScreen';
 import MatchDetailsModal from '../components/MatchDetailsModal';
 import TeamSelectionScreen from './TeamSelectionScreen';
+import NotificationTestScreen from './NotificationTestScreen';
+import EnhancedFeaturesDemoScreen from './EnhancedFeaturesDemoScreen';
 // import PlayerSearchScreen from './PlayerSearchScreen';
 // import TeamCreationScreen from './TeamCreationScreen';
 // import { apiService } from '../services/api';
@@ -166,6 +168,12 @@ const HomeScreen: React.FC = () => {
   // Team Selection
   const [showTeamSelection, setShowTeamSelection] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<any>(null);
+  
+  // Notification Test
+  const [showNotificationTest, setShowNotificationTest] = useState(false);
+  
+  // Enhanced Features Demo
+  const [showEnhancedDemo, setShowEnhancedDemo] = useState(false);
 
   useEffect(() => {
     // loadAsiaCupMatches();
@@ -409,6 +417,23 @@ const HomeScreen: React.FC = () => {
     console.log('Team selected:', team);
     // For now, just show an alert
     Alert.alert('Team Selected', `You selected ${team.name} (${team.shortName})`);
+  };
+
+  const handleNotificationTestPress = () => {
+    setShowNotificationTest(true);
+  };
+
+  const handleNotificationTestBack = () => {
+    setShowNotificationTest(false);
+  };
+
+  const handleEnhancedFeaturesPress = () => {
+    console.log('🎯 Enhanced Features Demo pressed!');
+    setShowEnhancedDemo(true);
+  };
+
+  const handleEnhancedDemoBack = () => {
+    setShowEnhancedDemo(false);
   };
 
   const handleStartMatchNext = async (teamA: string, teamB: string) => {
@@ -816,7 +841,7 @@ const HomeScreen: React.FC = () => {
             console.log('🔄 Profile updated, refreshing data...');
             await forceRefresh();
           }}
-        />
+      />
     );
   }
 
@@ -930,6 +955,31 @@ const HomeScreen: React.FC = () => {
     return <UserLoginScreen onLogin={handleUserLoginSuccess} />;
   }
 
+  // Show enhanced features demo screen
+  if (showEnhancedDemo) {
+    return (
+      <EnhancedFeaturesDemoScreen
+        onBack={handleEnhancedDemoBack}
+        onMatchHistoryPress={() => {
+          setShowEnhancedDemo(false);
+          setShowMatchHistory(true);
+        }}
+        currentUserName={user?.phoneNumber || currentPlayer?.name || 'Player'}
+        currentUserPhone={user?.phoneNumber || ''}
+        isPro={false} // Set to true to test PRO features, false to test FREE user experience
+      />
+    );
+  }
+
+  // Show notification test screen
+  if (showNotificationTest) {
+    return (
+      <NotificationTestScreen
+        onBack={handleNotificationTestBack}
+      />
+    );
+  }
+
   // Show team selection screen
   if (showTeamSelection) {
     return (
@@ -999,8 +1049,8 @@ const HomeScreen: React.FC = () => {
             <Text style={styles.screenDescription}>
               Track your performance, stats, and achievements
               </Text>
-          </View>
-        )}
+            </View>
+          )}
 
         {currentScreen === 'community' && (
           <View style={styles.screenContent}>
@@ -1008,7 +1058,7 @@ const HomeScreen: React.FC = () => {
             <Text style={styles.screenDescription}>
               Connect with cricket players and fans
               </Text>
-            </View>
+        </View>
           )}
 
         {/* Loading State */}
@@ -1111,7 +1161,7 @@ const HomeScreen: React.FC = () => {
                 onPress={handleMatchManagementPress}
                 size="medium"
             style={styles.secondaryButton}
-          />
+              />
           <Button
                 title="📚 Match History"
                 onPress={handleMatchHistoryPress}
@@ -1122,7 +1172,7 @@ const HomeScreen: React.FC = () => {
                 title="👑 Manage Admins"
                 onPress={() => handleManageAdmins('demo-team-id', 'Demo Team')}
                 size="medium"
-                style={styles.secondaryButton}
+            style={styles.secondaryButton}
           />
               {selectedMatchId && (
           <Button
@@ -1140,7 +1190,7 @@ const HomeScreen: React.FC = () => {
                   style={styles.finishButton}
                 />
               )}
-            </View>
+        </View>
           )}
         </View> */}
 
@@ -1151,6 +1201,14 @@ const HomeScreen: React.FC = () => {
             onPress={handleStartMatchPress}
           >
             <Text style={styles.startMatchButtonText}>🏏 Start Match</Text>
+          </TouchableOpacity>
+
+          {/* Debug: Enhanced Features Button */}
+          <TouchableOpacity
+            style={[styles.startMatchButton, { backgroundColor: COLORS.success, marginTop: 10 }]}
+            onPress={handleEnhancedFeaturesPress}
+          >
+            <Text style={styles.startMatchButtonText}>🎯 Test PRO Features</Text>
           </TouchableOpacity>
         </View>
 
@@ -1206,7 +1264,7 @@ const HomeScreen: React.FC = () => {
                 </View>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+      </ScrollView>
         </View>
       </ScrollView>
 
@@ -1224,6 +1282,7 @@ const HomeScreen: React.FC = () => {
         onProfilePress={handleSideDrawerProfilePress}
         onLogout={handleLogout}
         onTossPress={handleTossPress}
+        onEnhancedFeaturesPress={handleEnhancedFeaturesPress}
       />
 
       {/* Match Details Modal */}

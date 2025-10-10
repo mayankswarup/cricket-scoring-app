@@ -28,6 +28,8 @@ interface SideDrawerProps {
   onProfilePress: () => void;
   onLogout: () => void;
   onTossPress?: () => void;
+  onNotificationTestPress?: () => void;
+  onEnhancedFeaturesPress?: () => void;
 }
 
 const SideDrawer: React.FC<SideDrawerProps> = ({
@@ -37,6 +39,8 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
   onProfilePress,
   onLogout,
   onTossPress,
+  onNotificationTestPress,
+  onEnhancedFeaturesPress,
 }) => {
   const menuItems: MenuItem[] = [
     {
@@ -77,6 +81,29 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
         onClose();
         onTossPress?.();
       },
+    },
+    // Notifications - Skipped for now (requires dev build for iOS)
+    // {
+    //   id: 'notifications',
+    //   label: 'Test Notifications',
+    //   icon: '🔔',
+    //   onPress: () => {
+    //     onClose();
+    //     onNotificationTestPress?.();
+    //   },
+    //   badge: 'TEST',
+    //   badgeColor: COLORS.primary,
+    // },
+    {
+      id: 'enhanced',
+      label: 'Enhanced Features Demo',
+      icon: '✨',
+      onPress: () => {
+        onClose();
+        onEnhancedFeaturesPress?.();
+      },
+      badge: 'NEW',
+      badgeColor: COLORS.success,
     },
     {
       id: 'mycricket',

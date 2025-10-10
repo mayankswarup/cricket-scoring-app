@@ -83,17 +83,19 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, onClose })
 
   const renderBatting = () => (
     <View style={styles.battingContainer}>
-      {/* Team 1 Batting */}
+      {/* Team 1 Scorecard */}
       <TouchableOpacity 
         style={styles.accordionHeader}
-        onPress={() => toggleSection('team1Batting')}
+        onPress={() => toggleSection('team1Scorecard')}
       >
-        <Text style={styles.accordionTitle}>{match.team1.name} - Batting</Text>
-        <Text style={styles.accordionIcon}>{expandedSections.team1Batting ? '▼' : '▶'}</Text>
+        <Text style={styles.accordionTitle}>{match.team1.name} - Scorecard</Text>
+        <Text style={styles.accordionIcon}>{expandedSections.team1Scorecard ? '▼' : '▶'}</Text>
       </TouchableOpacity>
       
-      {expandedSections.team1Batting && (
+      {expandedSections.team1Scorecard && (
         <View style={styles.accordionContent}>
+          {/* Batting Section */}
+          <Text style={styles.subSectionTitle}>🏏 Batting</Text>
           <View style={styles.battingTable}>
             <View style={styles.tableHeader}>
               <Text style={styles.tableHeaderText}>Batsman</Text>
@@ -103,7 +105,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, onClose })
               <Text style={styles.tableHeaderText}>6s</Text>
               <Text style={styles.tableHeaderText}>SR</Text>
             </View>
-            {match.team1.batting.map((batsman: any, index: number) => (
+            {(match.team1?.batting || []).map((batsman: any, index: number) => (
               <View key={index} style={[
                 styles.tableRow,
                 batsman.isOut && styles.outBatsman
@@ -111,28 +113,63 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, onClose })
                 <Text style={[styles.tableCell, styles.batsmanName]}>
                   {batsman.name} {batsman.isOut ? '✗' : ''}
                 </Text>
-                <Text style={styles.tableCell}>{batsman.runs}</Text>
-                <Text style={styles.tableCell}>{batsman.balls}</Text>
-                <Text style={styles.tableCell}>{batsman.fours}</Text>
-                <Text style={styles.tableCell}>{batsman.sixes}</Text>
-                <Text style={styles.tableCell}>{batsman.strikeRate}</Text>
+                <Text style={styles.tableCell}>{batsman.runs || 0}</Text>
+                <Text style={styles.tableCell}>{batsman.balls || 0}</Text>
+                <Text style={styles.tableCell}>{batsman.fours || 0}</Text>
+                <Text style={styles.tableCell}>{batsman.sixes || 0}</Text>
+                <Text style={styles.tableCell}>{batsman.strikeRate || 0}</Text>
               </View>
             ))}
+            {(!match.team1?.batting || match.team1.batting.length === 0) && (
+              <View style={styles.noDataContainer}>
+                <Text style={styles.noDataText}>No batting data available</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Bowling Section */}
+          <Text style={[styles.subSectionTitle, styles.bowlingTitle]}>⚡ Bowling</Text>
+          <View style={styles.bowlingTable}>
+            <View style={styles.tableHeader}>
+              <Text style={styles.tableHeaderText}>Bowler</Text>
+              <Text style={styles.tableHeaderText}>O</Text>
+              <Text style={styles.tableHeaderText}>M</Text>
+              <Text style={styles.tableHeaderText}>R</Text>
+              <Text style={styles.tableHeaderText}>W</Text>
+              <Text style={styles.tableHeaderText}>Econ</Text>
+            </View>
+            {(match.team2?.bowling || []).map((bowler: any, index: number) => (
+              <View key={index} style={styles.tableRow}>
+                <Text style={[styles.tableCell, styles.bowlerName]}>{bowler.name}</Text>
+                <Text style={styles.tableCell}>{bowler.overs || 0}</Text>
+                <Text style={styles.tableCell}>{bowler.maidens || 0}</Text>
+                <Text style={styles.tableCell}>{bowler.runs || 0}</Text>
+                <Text style={styles.tableCell}>{bowler.wickets || 0}</Text>
+                <Text style={styles.tableCell}>{bowler.economy || 0}</Text>
+              </View>
+            ))}
+            {(!match.team2?.bowling || match.team2.bowling.length === 0) && (
+              <View style={styles.noDataContainer}>
+                <Text style={styles.noDataText}>No bowling data available</Text>
+              </View>
+            )}
           </View>
         </View>
       )}
 
-      {/* Team 2 Batting */}
+      {/* Team 2 Scorecard */}
       <TouchableOpacity 
         style={styles.accordionHeader}
-        onPress={() => toggleSection('team2Batting')}
+        onPress={() => toggleSection('team2Scorecard')}
       >
-        <Text style={styles.accordionTitle}>{match.team2.name} - Batting</Text>
-        <Text style={styles.accordionIcon}>{expandedSections.team2Batting ? '▼' : '▶'}</Text>
+        <Text style={styles.accordionTitle}>{match.team2.name} - Scorecard</Text>
+        <Text style={styles.accordionIcon}>{expandedSections.team2Scorecard ? '▼' : '▶'}</Text>
       </TouchableOpacity>
       
-      {expandedSections.team2Batting && (
+      {expandedSections.team2Scorecard && (
         <View style={styles.accordionContent}>
+          {/* Batting Section */}
+          <Text style={styles.subSectionTitle}>🏏 Batting</Text>
           <View style={styles.battingTable}>
             <View style={styles.tableHeader}>
               <Text style={styles.tableHeaderText}>Batsman</Text>
@@ -142,7 +179,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, onClose })
               <Text style={styles.tableHeaderText}>6s</Text>
               <Text style={styles.tableHeaderText}>SR</Text>
             </View>
-            {match.team2.batting.map((batsman: any, index: number) => (
+            {(match.team2?.batting || []).map((batsman: any, index: number) => (
               <View key={index} style={[
                 styles.tableRow,
                 batsman.isOut && styles.outBatsman
@@ -150,32 +187,22 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, onClose })
                 <Text style={[styles.tableCell, styles.batsmanName]}>
                   {batsman.name} {batsman.isOut ? '✗' : ''}
                 </Text>
-                <Text style={styles.tableCell}>{batsman.runs}</Text>
-                <Text style={styles.tableCell}>{batsman.balls}</Text>
-                <Text style={styles.tableCell}>{batsman.fours}</Text>
-                <Text style={styles.tableCell}>{batsman.sixes}</Text>
-                <Text style={styles.tableCell}>{batsman.strikeRate}</Text>
+                <Text style={styles.tableCell}>{batsman.runs || 0}</Text>
+                <Text style={styles.tableCell}>{batsman.balls || 0}</Text>
+                <Text style={styles.tableCell}>{batsman.fours || 0}</Text>
+                <Text style={styles.tableCell}>{batsman.sixes || 0}</Text>
+                <Text style={styles.tableCell}>{batsman.strikeRate || 0}</Text>
               </View>
             ))}
+            {(!match.team2?.batting || match.team2.batting.length === 0) && (
+              <View style={styles.noDataContainer}>
+                <Text style={styles.noDataText}>No batting data available</Text>
+              </View>
+            )}
           </View>
-        </View>
-      )}
-    </View>
-  );
 
-  const renderBowling = () => (
-    <View style={styles.bowlingContainer}>
-      {/* Team 1 Bowling */}
-      <TouchableOpacity 
-        style={styles.accordionHeader}
-        onPress={() => toggleSection('team1Bowling')}
-      >
-        <Text style={styles.accordionTitle}>{match.team1.name} - Bowling</Text>
-        <Text style={styles.accordionIcon}>{expandedSections.team1Bowling ? '▼' : '▶'}</Text>
-      </TouchableOpacity>
-      
-      {expandedSections.team1Bowling && (
-        <View style={styles.accordionContent}>
+          {/* Bowling Section */}
+          <Text style={[styles.subSectionTitle, styles.bowlingTitle]}>⚡ Bowling</Text>
           <View style={styles.bowlingTable}>
             <View style={styles.tableHeader}>
               <Text style={styles.tableHeaderText}>Bowler</Text>
@@ -185,55 +212,28 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, onClose })
               <Text style={styles.tableHeaderText}>W</Text>
               <Text style={styles.tableHeaderText}>Econ</Text>
             </View>
-            {match.team1.bowling.map((bowler: any, index: number) => (
+            {(match.team1?.bowling || []).map((bowler: any, index: number) => (
               <View key={index} style={styles.tableRow}>
                 <Text style={[styles.tableCell, styles.bowlerName]}>{bowler.name}</Text>
-                <Text style={styles.tableCell}>{bowler.overs}</Text>
-                <Text style={styles.tableCell}>{bowler.maidens}</Text>
-                <Text style={styles.tableCell}>{bowler.runs}</Text>
-                <Text style={styles.tableCell}>{bowler.wickets}</Text>
-                <Text style={styles.tableCell}>{bowler.economy}</Text>
+                <Text style={styles.tableCell}>{bowler.overs || 0}</Text>
+                <Text style={styles.tableCell}>{bowler.maidens || 0}</Text>
+                <Text style={styles.tableCell}>{bowler.runs || 0}</Text>
+                <Text style={styles.tableCell}>{bowler.wickets || 0}</Text>
+                <Text style={styles.tableCell}>{bowler.economy || 0}</Text>
               </View>
             ))}
-          </View>
-        </View>
-      )}
-
-      {/* Team 2 Bowling */}
-      <TouchableOpacity 
-        style={styles.accordionHeader}
-        onPress={() => toggleSection('team2Bowling')}
-      >
-        <Text style={styles.accordionTitle}>{match.team2.name} - Bowling</Text>
-        <Text style={styles.accordionIcon}>{expandedSections.team2Bowling ? '▼' : '▶'}</Text>
-      </TouchableOpacity>
-      
-      {expandedSections.team2Bowling && (
-        <View style={styles.accordionContent}>
-          <View style={styles.bowlingTable}>
-            <View style={styles.tableHeader}>
-              <Text style={styles.tableHeaderText}>Bowler</Text>
-              <Text style={styles.tableHeaderText}>O</Text>
-              <Text style={styles.tableHeaderText}>M</Text>
-              <Text style={styles.tableHeaderText}>R</Text>
-              <Text style={styles.tableHeaderText}>W</Text>
-              <Text style={styles.tableHeaderText}>Econ</Text>
-            </View>
-            {match.team2.bowling.map((bowler: any, index: number) => (
-              <View key={index} style={styles.tableRow}>
-                <Text style={[styles.tableCell, styles.bowlerName]}>{bowler.name}</Text>
-                <Text style={styles.tableCell}>{bowler.overs}</Text>
-                <Text style={styles.tableCell}>{bowler.maidens}</Text>
-                <Text style={styles.tableCell}>{bowler.runs}</Text>
-                <Text style={styles.tableCell}>{bowler.wickets}</Text>
-                <Text style={styles.tableCell}>{bowler.economy}</Text>
+            {(!match.team1?.bowling || match.team1.bowling.length === 0) && (
+              <View style={styles.noDataContainer}>
+                <Text style={styles.noDataText}>No bowling data available</Text>
               </View>
-            ))}
+            )}
           </View>
         </View>
       )}
     </View>
   );
+
+  const renderBowling = () => null;
 
   const renderCommentary = () => (
     <View style={styles.commentaryContainer}>
@@ -283,15 +283,7 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, onClose })
             onPress={() => setActiveTab('batting')}
           >
             <Text style={[styles.tabText, activeTab === 'batting' && styles.activeTabText]}>
-              Batting
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'bowling' && styles.activeTab]}
-            onPress={() => setActiveTab('bowling')}
-          >
-            <Text style={[styles.tabText, activeTab === 'bowling' && styles.activeTabText]}>
-              Bowling
+              Scorecard
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -308,7 +300,6 @@ const MatchDetailsModal: React.FC<MatchDetailsModalProps> = ({ match, onClose })
         <ScrollView style={styles.content}>
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'batting' && renderBatting()}
-          {activeTab === 'bowling' && renderBowling()}
           {activeTab === 'commentary' && renderCommentary()}
         </ScrollView>
       </SafeAreaView>
@@ -599,6 +590,27 @@ const styles = StyleSheet.create({
   },
   bowlingContainer: {
     gap: SIZES.md,
+  },
+  noDataContainer: {
+    padding: SIZES.lg,
+    alignItems: 'center',
+  },
+  noDataText: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  subSectionTitle: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+    marginTop: SIZES.md,
+    marginBottom: SIZES.sm,
+    paddingLeft: SIZES.md,
+  },
+  bowlingTitle: {
+    marginTop: SIZES.xl,
   },
 });
 
