@@ -105,7 +105,9 @@ const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA, teamB, onTossCom
                   styles.face,
                   { borderRadius: 90, transform: [{ perspective: 1000 }, { rotateY: frontRotY }] },
                 ]}>
-                <Image source={require('../../assets/img/coin_heads.png')} style={{ width: "100%", height: "100%", borderRadius: 90 }} resizeMode="cover" />
+                <View style={styles.coinFace}>
+                  <Text style={styles.coinText}>H</Text>
+                </View>
               </Animated.View>
 
               {/* BACK (Tails) */}
@@ -115,7 +117,9 @@ const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA, teamB, onTossCom
                   styles.face,
                   { borderRadius: 90, transform: [{ perspective: 1000 }, { rotateY: backRotY }] },
                 ]}>
-                <Image source={require('../../assets/img/coin_tails.png')} style={{ width: "100%", height: "100%", borderRadius: 90 }} resizeMode="cover" />
+                <View style={styles.coinFace}>
+                  <Text style={styles.coinText}>T</Text>
+                </View>
               </Animated.View>
 
               {/* EDGE shimmer */}
@@ -428,6 +432,22 @@ const styles = StyleSheet.create({
   battingButtonSubtext: {
     fontSize: 12,
     color: '#666',
+    textAlign: 'center',
+  },
+  coinFace: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FFD700',
+    borderRadius: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: '#B8860B',
+  },
+  coinText: {
+    fontSize: 80,
+    fontWeight: 'bold',
+    color: '#000',
     textAlign: 'center',
   },
 });
