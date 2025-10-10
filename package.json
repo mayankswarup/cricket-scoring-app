@@ -22,16 +22,16 @@
     "expo-notifications": "^0.32.12",
     "expo-status-bar": "~3.0.8",
     "firebase": "^12.3.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
     "react-native": "0.81.4",
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
-    "typescript": "~5.9.2"
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
+    "typescript": "~5.3.3"
   },
   "engines": {
     "node": "20.x"
