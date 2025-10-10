@@ -29,6 +29,7 @@ interface SideDrawerProps {
   onLogout: () => void;
   onTossPress?: () => void;
   onNotificationTestPress?: () => void;
+  onEnhancedFeaturesPress?: () => void;
 }
 
 const SideDrawer: React.FC<SideDrawerProps> = ({
@@ -39,6 +40,7 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
   onLogout,
   onTossPress,
   onNotificationTestPress,
+  onEnhancedFeaturesPress,
 }) => {
   const menuItems: MenuItem[] = [
     {
@@ -92,6 +94,17 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
     //   badge: 'TEST',
     //   badgeColor: COLORS.primary,
     // },
+    {
+      id: 'enhanced',
+      label: 'Enhanced Features Demo',
+      icon: '✨',
+      onPress: () => {
+        onClose();
+        onEnhancedFeaturesPress?.();
+      },
+      badge: 'NEW',
+      badgeColor: COLORS.success,
+    },
     {
       id: 'mycricket',
       label: 'My Cricket',
