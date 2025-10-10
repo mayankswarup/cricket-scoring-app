@@ -1,37 +1,622 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <title>cricket-app</title>
-    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
-    <style id="expo-reset">
-      /* These styles make the body full-height */
-      html,
-      body {
-        height: 100%;
-      }
-      /* These styles disable body scrolling if you are using <ScrollView> */
-      body {
-        overflow: hidden;
-      }
-      /* These styles make the root element full-height */
-      #root {
-        display: flex;
-        height: 100%;
-        flex: 1;
-      }
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cricket App - Live Scoring</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .status {
+            background: #28a745;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: inline-block;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        
+        .tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 5px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .tab {
+            padding: 15px 30px;
+            border: none;
+            background: transparent;
+            color: white;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+        
+        .tab.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffd700;
+        }
+        
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .tab-content {
+            display: none;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .match-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 15px;
+            margin: 20px 0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .match-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .team-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .team-name {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #ffd700;
+        }
+        
+        .team-score {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        .match-status {
+            background: #28a745;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+        
+        .live-score {
+            font-size: 2rem;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+            color: #ffd700;
+        }
+        
+        .over-info {
+            text-align: center;
+            margin: 15px 0;
+            font-size: 1.2rem;
+        }
+        
+        .scoring-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .score-button {
+            background: #28a745;
+            color: white;
+            padding: 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .score-button:hover {
+            background: #218838;
+            transform: scale(1.05);
+        }
+        
+        .score-button.wicket {
+            background: #dc3545;
+        }
+        
+        .score-button.wicket:hover {
+            background: #c82333;
+        }
+        
+        .commentary {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .commentary-item {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .commentary-item:last-child {
+            border-bottom: none;
+        }
+        
+        .ball-info {
+            font-weight: bold;
+            color: #ffd700;
+        }
+        
+        .player-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+            backdrop-filter: blur(10px);
+        }
+        
+        .player-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ffd700;
+            margin-bottom: 10px;
+        }
+        
+        .player-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 15px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+        }
+        
+        .stat-value {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #ffd700;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        
+        .form-group {
+            margin: 20px 0;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+        
+        .form-group select {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+            backdrop-filter: blur(10px);
+        }
+        
+        .form-group select option {
+            background: #333;
+            color: white;
+        }
     </style>
-  <link rel="icon" href="favicon.ico" /></head>
-
-  <body>
-    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
-    <noscript>
-      You need to enable JavaScript to run this app.
-    </noscript>
-    <!-- The root element for your Expo app. -->
-    <div id="root"></div>
-  <script src="_expo/static/js/web/index-fdc7458714d26c155662257903437239.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏏 Cricket App</h1>
+            <div class="status">✅ LIVE & WORKING</div>
+            <p style="font-size: 1.2rem; opacity: 0.9;">Professional Cricket Scoring Application</p>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('live')">📊 Live Scoring</button>
+            <button class="tab" onclick="showTab('players')">👥 Player Stats</button>
+            <button class="tab" onclick="showTab('teams')">🏆 Team Stats</button>
+            <button class="tab" onclick="showTab('matches')">📈 Match History</button>
+        </div>
+        
+        <!-- Live Scoring Tab -->
+        <div id="live" class="tab-content active">
+            <div class="match-card">
+                <div class="match-header">
+                    <div class="team-info">
+                        <span class="team-name">CSK</span>
+                        <span class="team-score" id="team1-score">89/2</span>
+                    </div>
+                    <div class="match-status">LIVE</div>
+                    <div class="team-info">
+                        <span class="team-score" id="team2-score">92/1</span>
+                        <span class="team-name">RCB</span>
+                    </div>
+                </div>
+                
+                <div class="over-info">
+                    Over: <span id="current-over">12.4</span> | Target: <span id="target">180</span>
+                </div>
+                
+                <div class="live-score">
+                    CSK need <span id="runs-needed">91</span> runs from <span id="balls-left">44</span> balls
+                </div>
+                
+                <div class="scoring-buttons">
+                    <button class="score-button" onclick="addRuns(0)">0</button>
+                    <button class="score-button" onclick="addRuns(1)">1</button>
+                    <button class="score-button" onclick="addRuns(2)">2</button>
+                    <button class="score-button" onclick="addRuns(3)">3</button>
+                    <button class="score-button" onclick="addRuns(4)">4</button>
+                    <button class="score-button" onclick="addRuns(6)">6</button>
+                    <button class="score-button wicket" onclick="addWicket()">W</button>
+                    <button class="score-button" onclick="addWide()">Wd</button>
+                    <button class="score-button" onclick="addNoBall()">Nb</button>
+                </div>
+                
+                <div class="commentary" id="commentary">
+                    <div class="commentary-item">
+                        <span class="ball-info">12.4</span> - FOUR! Great shot by the batsman!
+                    </div>
+                    <div class="commentary-item">
+                        <span class="ball-info">12.3</span> - Single to deep mid-wicket
+                    </div>
+                    <div class="commentary-item">
+                        <span class="ball-info">12.2</span> - Dot ball, good line and length
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Player Stats Tab -->
+        <div id="players" class="tab-content">
+            <div class="match-card">
+                <h3 style="color: #ffd700; margin-bottom: 20px;">📊 Top Players</h3>
+                
+                <div class="player-card">
+                    <div class="player-name">🏏 Virat Kohli</div>
+                    <div class="player-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">2134</div>
+                            <div class="stat-label">Runs</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">15</div>
+                            <div class="stat-label">Fifties</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">5</div>
+                            <div class="stat-label">Hundreds</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">42.5</div>
+                            <div class="stat-label">Average</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="player-card">
+                    <div class="player-name">🏆 Rohit Sharma</div>
+                    <div class="player-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">1847</div>
+                            <div class="stat-label">Runs</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">12</div>
+                            <div class="stat-label">Fifties</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">4</div>
+                            <div class="stat-label">Hundreds</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">38.2</div>
+                            <div class="stat-label">Average</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="player-card">
+                    <div class="player-name">🎯 Jasprit Bumrah</div>
+                    <div class="player-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">56</div>
+                            <div class="stat-label">Wickets</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">4</div>
+                            <div class="stat-label">4-Wicket Hauls</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">7.2</div>
+                            <div class="stat-label">Economy</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">18.5</div>
+                            <div class="stat-label">Average</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Team Stats Tab -->
+        <div id="teams" class="tab-content">
+            <div class="match-card">
+                <h3 style="color: #ffd700; margin-bottom: 20px;">🏆 Team Performance</h3>
+                
+                <div class="form-group">
+                    <label>Select Team:</label>
+                    <select id="team-select" onchange="showTeamStats()">
+                        <option value="csk">CSK - Chennai Super Kings</option>
+                        <option value="rcb">RCB - Royal Challengers Bangalore</option>
+                        <option value="mi">MI - Mumbai Indians</option>
+                        <option value="kkr">KKR - Kolkata Knight Riders</option>
+                    </select>
+                </div>
+                
+                <div id="team-stats-display">
+                    <div class="player-card">
+                        <div class="player-name">📊 CSK Statistics</div>
+                        <div class="player-stats">
+                            <div class="stat-item">
+                                <div class="stat-value">8</div>
+                                <div class="stat-label">Matches Won</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">2</div>
+                                <div class="stat-label">Matches Lost</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">80%</div>
+                                <div class="stat-label">Win Rate</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">4</div>
+                                <div class="stat-label">Titles</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Match History Tab -->
+        <div id="matches" class="tab-content">
+            <div class="match-card">
+                <h3 style="color: #ffd700; margin-bottom: 20px;">📈 Recent Matches</h3>
+                
+                <div class="match-card">
+                    <div class="match-header">
+                        <div class="team-info">
+                            <span class="team-name">CSK</span>
+                            <span class="team-score">189/4</span>
+                        </div>
+                        <div class="match-status" style="background: #28a745;">WON</div>
+                        <div class="team-info">
+                            <span class="team-score">165/8</span>
+                            <span class="team-name">RCB</span>
+                        </div>
+                    </div>
+                    <p style="text-align: center; margin-top: 15px; opacity: 0.8;">CSK won by 24 runs</p>
+                </div>
+                
+                <div class="match-card">
+                    <div class="match-header">
+                        <div class="team-info">
+                            <span class="team-name">MI</span>
+                            <span class="team-score">178/6</span>
+                        </div>
+                        <div class="match-status" style="background: #dc3545;">LOST</div>
+                        <div class="team-info">
+                            <span class="team-score">182/3</span>
+                            <span class="team-name">KKR</span>
+                        </div>
+                    </div>
+                    <p style="text-align: center; margin-top: 15px; opacity: 0.8;">KKR won by 7 wickets</p>
+                </div>
+                
+                <div class="match-card">
+                    <div class="match-header">
+                        <div class="team-info">
+                            <span class="team-name">CSK</span>
+                            <span class="team-score">145/7</span>
+                        </div>
+                        <div class="match-status" style="background: #28a745;">WON</div>
+                        <div class="team-info">
+                            <span class="team-score">142/9</span>
+                            <span class="team-name">MI</span>
+                        </div>
+                    </div>
+                    <p style="text-align: center; margin-top: 15px; opacity: 0.8;">CSK won by 3 runs</p>
+                </div>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 40px; opacity: 0.8;">
+            <p>🏏 Professional Cricket Scoring App | Built with HTML/CSS/JavaScript</p>
+            <p style="font-size: 0.9rem; margin-top: 10px;">Interactive demo with live scoring, player stats, and match history</p>
+        </div>
+    </div>
+    
+    <script>
+        let currentScore = { team1: 89, team2: 92, wickets1: 2, wickets2: 1, overs: 12.4, target: 180 };
+        let commentary = [];
+        
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        function addRuns(runs) {
+            currentScore.team1 += runs;
+            currentScore.overs += 0.1;
+            
+            if (currentScore.overs % 1 === 0) {
+                currentScore.overs = Math.floor(currentScore.overs) + 0.6;
+            }
+            
+            updateScore();
+            addCommentary(`${currentScore.overs}`, `${runs === 0 ? 'Dot ball' : runs === 4 ? 'FOUR!' : runs === 6 ? 'SIX!' : `${runs} run${runs > 1 ? 's' : ''}`}`);
+        }
+        
+        function addWicket() {
+            currentScore.wickets1 += 1;
+            updateScore();
+            addCommentary(`${currentScore.overs}`, 'WICKET! Bowled him!');
+        }
+        
+        function addWide() {
+            currentScore.team1 += 1;
+            updateScore();
+            addCommentary(`${currentScore.overs}`, 'WIDE! Extra run');
+        }
+        
+        function addNoBall() {
+            currentScore.team1 += 1;
+            updateScore();
+            addCommentary(`${currentScore.overs}`, 'NO BALL! Free hit');
+        }
+        
+        function updateScore() {
+            document.getElementById('team1-score').textContent = `${currentScore.team1}/${currentScore.wickets1}`;
+            document.getElementById('team2-score').textContent = `${currentScore.team2}/${currentScore.wickets2}`;
+            document.getElementById('current-over').textContent = currentScore.overs.toFixed(1);
+            
+            const runsNeeded = currentScore.target - currentScore.team1;
+            const ballsLeft = (20 - currentScore.overs) * 6;
+            
+            document.getElementById('runs-needed').textContent = runsNeeded;
+            document.getElementById('balls-left').textContent = Math.floor(ballsLeft);
+        }
+        
+        function addCommentary(over, text) {
+            const commentaryDiv = document.getElementById('commentary');
+            const newCommentary = document.createElement('div');
+            newCommentary.className = 'commentary-item';
+            newCommentary.innerHTML = `<span class="ball-info">${over}</span> - ${text}`;
+            
+            commentaryDiv.insertBefore(newCommentary, commentaryDiv.firstChild);
+            
+            // Keep only last 10 commentary items
+            while (commentaryDiv.children.length > 10) {
+                commentaryDiv.removeChild(commentaryDiv.lastChild);
+            }
+        }
+        
+        function showTeamStats() {
+            const selectedTeam = document.getElementById('team-select').value;
+            const teamStatsDisplay = document.getElementById('team-stats-display');
+            
+            const teamData = {
+                csk: { name: 'CSK - Chennai Super Kings', won: 8, lost: 2, winRate: '80%', titles: 4 },
+                rcb: { name: 'RCB - Royal Challengers Bangalore', won: 6, lost: 4, winRate: '60%', titles: 0 },
+                mi: { name: 'MI - Mumbai Indians', won: 7, lost: 3, winRate: '70%', titles: 5 },
+                kkr: { name: 'KKR - Kolkata Knight Riders', won: 5, lost: 5, winRate: '50%', titles: 2 }
+            };
+            
+            const team = teamData[selectedTeam];
+            teamStatsDisplay.innerHTML = `
+                <div class="player-card">
+                    <div class="player-name">📊 ${team.name}</div>
+                    <div class="player-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">${team.won}</div>
+                            <div class="stat-label">Matches Won</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${team.lost}</div>
+                            <div class="stat-label">Matches Lost</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${team.winRate}</div>
+                            <div class="stat-label">Win Rate</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${team.titles}</div>
+                            <div class="stat-label">Titles</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            updateScore();
+            console.log('🏏 Cricket App loaded successfully!');
+        });
+    </script>
 </body>
 </html>
