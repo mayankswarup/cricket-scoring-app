@@ -901,6 +901,10 @@ const HomeScreen: React.FC = () => {
       <StartMatchScreen
         onBack={handleStartMatchBack}
         onNext={handleStartMatchNext}
+        onCreateTeam={() => {
+          setShowStartMatch(false);
+          setShowMatchManagement(true);
+        }}
       />
     );
   }

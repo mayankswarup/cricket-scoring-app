@@ -108,8 +108,8 @@ const LiveScorecard: React.FC<LiveScorecardProps> = ({ matchData, isLive = true 
           <Text style={styles.scoreText}>{runRate}</Text>
           <Text style={styles.scoreLabel}>Run Rate</Text>
         </View>
-        </View>
-        
+      </View>
+
       {/* Current Batsmen */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Current Batsmen</Text>
@@ -166,7 +166,7 @@ const LiveScorecard: React.FC<LiveScorecardProps> = ({ matchData, isLive = true 
                 ball.runs === 6 && styles.ballSix,
               ]}>
                 {ball.runs}
-          </Text>
+              </Text>
               <Text style={styles.ballType}>{ball.type}</Text>
             </View>
           ))}

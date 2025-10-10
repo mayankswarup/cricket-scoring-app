@@ -1,0 +1,26 @@
+[33mcommit be85286b7b7702883b0e99732cd8bf6b367b9fdc[m
+Author: Mayank Swarup <mayank.swarup@valtech.com>
+Date:   Fri Oct 10 12:13:45 2025 +0530
+
+     Deploy REAL Expo Cricket App to GitHub Pages
+    
+     PROPER DEPLOYMENT METHOD:
+    - Used 'npx expo export -p web --output-dir dist'
+    - Added SPA fallback (404.html) for client-side routing
+    - Moved dist contents to root for GitHub Pages
+    - Fixed missing coin images (coin_heads.png, coin_tails.png)
+    
+     YOUR REAL CRICKET APP:
+    - Full React Native app with all PRO features
+    - Firebase integration
+    - Player stats, team stats, match history
+    - Professional UI with all your development work
+    - Interactive scoring, live updates, everything!
+    
+     GITHUB PAGES READY:
+    - Static files that GitHub Pages can serve
+    - SPA routing support with 404.html
+    - All assets properly bundled
+    - Your brother can now see your ACTUAL cricket app!
+    
+    This is your REAL app, not a simple HTML version!

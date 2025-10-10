@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -68,6 +68,7 @@ const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({
   const [battingOrder, setBattingOrder] = useState<string[]>([]);
   const [bowlingOrder, setBowlingOrder] = useState<string[]>([]);
   const [currentSetup, setCurrentSetup] = useState<'batting' | 'bowling'>('batting');
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const getCurrentTeamPlayers = () => {
     return currentSetup === 'batting' ? teamAPlayers : teamBPlayers;
@@ -95,7 +96,12 @@ const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({
         Alert.alert('Error', 'Please select at least 2 batsmen');
         return;
       }
-      setCurrentSetup('bowling');
+      // Scroll to top FIRST, then change setup
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+      // Small delay to ensure scroll completes before changing setup
+      setTimeout(() => {
+        setCurrentSetup('bowling');
+      }, 50);
     } else {
       if (bowlingOrder.length < 1) {
         Alert.alert('Error', 'Please select at least 1 bowler');
@@ -125,7 +131,10 @@ const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        ref={scrollViewRef} 
+        style={styles.content}
+      >
         {/* Match Info */}
         <View style={styles.matchInfo}>
           <Text style={styles.matchTitle}>{teamA} vs {teamB}</Text>
