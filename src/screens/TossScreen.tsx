@@ -9,6 +9,7 @@ import {
   Dimensions,
   Pressable,
   Image,
+  ScrollView,
 } from 'react-native';
 import { COLORS, SIZES, FONTS } from '../constants';
 // import { UI_CONFIG } from '../config/appConfig';
@@ -90,8 +91,8 @@ const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA, teamB, onTossCom
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Main Content */}
-      <View style={styles.content}>
+      {/* Main Content - Scrollable */}
+      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.content}>
         <Text style={styles.subtitle}>Flip the coin to decide!</Text>
         
         {/* Coin Container */}
@@ -212,7 +213,7 @@ const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA, teamB, onTossCom
             </View>
           </View>
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 };
@@ -248,11 +249,15 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 60,
   },
-  content: {
+  scrollContent: {
     flex: 1,
+  },
+  content: {
     alignItems: 'center',
     paddingHorizontal: SIZES.lg,
     paddingTop: SIZES.xxl,
+    paddingBottom: SIZES.xxl, // Add bottom padding for better scrolling
+    flexGrow: 1,
   },
   subtitle: {
     fontSize: 18,
