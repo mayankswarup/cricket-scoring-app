@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { COLORS, SIZES, FONTS } from '../constants';
 import { PlayerRegistration } from '../types';
+import { UserProfile } from '../services/userProfileService';
 
 interface MenuItem {
   id: string;
@@ -24,10 +25,15 @@ interface MenuItem {
 interface SideDrawerProps {
   visible: boolean;
   onClose: () => void;
-  user?: PlayerRegistration | null;
+  user?: {
+    phoneNumber: string;
+    name?: string;
+    profile?: UserProfile;
+  } | null;
   onProfilePress: () => void;
   onLogout: () => void;
   onTossPress?: () => void;
+  onStartMatchPress?: () => void;
   onNotificationTestPress?: () => void;
   onEnhancedFeaturesPress?: () => void;
 }
@@ -39,6 +45,7 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
   onProfilePress,
   onLogout,
   onTossPress,
+  onStartMatchPress,
   onNotificationTestPress,
   onEnhancedFeaturesPress,
 }) => {
@@ -63,7 +70,11 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
       id: 'match',
       label: 'Start A Match',
       icon: '🪙',
-      onPress: () => console.log('Start Match pressed'),
+      onPress: () => {
+        console.log('🏏 Start A Match pressed from SideDrawer');
+        onClose(); // Close the drawer
+        onStartMatchPress?.(); // Call the start match function
+      },
       badge: 'FREE',
       badgeColor: COLORS.warning,
     },
@@ -75,12 +86,15 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
     },
     {
       id: 'toss',
-      label: 'Toss',
-      icon: '🎯',
+      label: 'Quick Toss',
+      icon: '🪙',
       onPress: () => {
+        console.log('🪙 Quick Toss pressed from SideDrawer');
         onClose();
         onTossPress?.();
       },
+      badge: 'FREE',
+      badgeColor: COLORS.warning,
     },
     // Notifications - Skipped for now (requires dev build for iOS)
     // {
@@ -277,9 +291,9 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
             
             <TouchableOpacity onPress={onProfilePress} style={styles.profileSection}>
               <View style={styles.profileImageContainer}>
-                {user?.profileImage ? (
+                {user?.profile?.profilePicture ? (
                   <Image 
-                    source={{ uri: user.profileImage }} 
+                    source={{ uri: user.profile.profilePicture }} 
                     style={styles.profileImage}
                   />
                 ) : (
@@ -291,11 +305,19 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
                 )}
               </View>
               <View style={styles.profileInfo}>
-                <Text style={styles.userName}>{user?.name || 'Guest User'}</Text>
-                <Text style={styles.userPhone}>{user?.phone || '+91 00000 00000'}</Text>
-                <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
+                <Text style={styles.userName}>
+                  {user?.name || user?.profile?.name || 'Guest User'}
+                </Text>
+                <Text style={styles.userPhone}>
+                  {user?.phoneNumber ? `+91 ${user.phoneNumber}` : '+91 00000 00000'}
+                </Text>
+                <Text style={styles.userEmail}>
+                  {user?.profile?.email || 'user@example.com'}
+                </Text>
                 <View style={styles.userStatus}>
-                  <Text style={styles.userStatusText}>Free User</Text>
+                  <Text style={styles.userStatusText}>
+                    {user?.profile?.isPro ? 'PRO User' : 'Free User'}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.profileArrow}>›</Text>
@@ -380,7 +402,13 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
 
           {/* Footer */}
           <View style={styles.footer}>
-            <TouchableOpacity onPress={onLogout} style={styles.logoutButton}>
+            <TouchableOpacity 
+              onPress={() => {
+                console.log('🚪 Logout button pressed');
+                onLogout();
+              }} 
+              style={styles.logoutButton}
+            >
               <Text style={styles.logoutText}>🚪 Logout</Text>
             </TouchableOpacity>
             

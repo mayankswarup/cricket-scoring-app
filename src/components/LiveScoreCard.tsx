@@ -128,7 +128,7 @@ const LiveScorecard: React.FC<LiveScorecardProps> = ({ matchData, isLive = true 
             </Text>
             <Text style={styles.batsmanScore}>
               {currentBatsmen.nonStriker.runs} ({currentBatsmen.nonStriker.balls})
-            </Text>
+        </Text>
           </View>
         </View>
       </View>

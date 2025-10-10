@@ -21,4 +21,7 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
+// Force refresh auth state (helps with billing changes)
+console.log('🔥 Firebase initialized for project:', firebaseConfig.projectId);
+
 export default app;

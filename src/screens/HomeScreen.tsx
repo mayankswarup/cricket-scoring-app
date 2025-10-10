@@ -19,14 +19,14 @@ import Button from '../components/Button';
 import BottomNavigation from '../components/BottomNavigation';
 import TopNavigation from '../components/TopNavigation';
 import { useUser } from '../contexts/UserContext';
-import UserLoginScreen from './UserLoginScreen';
+// UserLoginScreen removed - using PhoneLoginScreen in App.tsx instead
 import AdminManagement from '../components/AdminManagement';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import SideDrawer from '../components/SideDrawer';
 // import LiveMatchesList from '../components/LiveMatchesList';
 // import MatchDetailScreen from './MatchDetailScreen';
 // import PlayerLoginScreen from './PlayerLoginScreen';
-import SimpleOTPLoginScreen from './SimpleOTPLoginScreen';
+// SimpleOTPLoginScreen removed - using PhoneLoginScreen instead
 import PlayerRegistrationScreen from './PlayerRegistrationScreen';
 import UserProfileScreen from './UserProfileScreen';
 import TossScreen from './TossScreen';
@@ -141,10 +141,11 @@ const HomeScreen: React.FC = () => {
   const [currentPlayer, setCurrentPlayer] = useState<PlayerRegistration | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showOTPLogin, setShowOTPLogin] = useState(false);
+  // showOTPLogin removed - using PhoneLoginScreen in App.tsx instead
   const [showPlayerRegistration, setShowPlayerRegistration] = useState(false);
   const [showUserProfile, setShowUserProfile] = useState(false);
   const [showToss, setShowToss] = useState(false);
+  const [showQuickToss, setShowQuickToss] = useState(false);
   const [showLiveScoring, setShowLiveScoring] = useState(false);
   const [showMatchManagement, setShowMatchManagement] = useState(false);
   const [showStartMatch, setShowStartMatch] = useState(false);
@@ -165,7 +166,7 @@ const HomeScreen: React.FC = () => {
   
   // User and Admin Management
   const { user, logout } = useUser();
-  const [showLogin, setShowLogin] = useState(false);
+  // showLogin removed - using PhoneLoginScreen in App.tsx instead
   const [showAdminManagement, setShowAdminManagement] = useState(false);
   const [selectedTeamForAdmin, setSelectedTeamForAdmin] = useState<{id: string, name: string} | null>(null);
   
@@ -188,10 +189,7 @@ const HomeScreen: React.FC = () => {
     checkAuthentication();
     loadMatchState();
     
-    // Check if user is logged in
-    if (!user) {
-      setShowLogin(true);
-    }
+    // User authentication handled in App.tsx with PhoneLoginScreen
   }, [user]);
 
   // Load match state from localStorage on app start
@@ -272,9 +270,7 @@ const HomeScreen: React.FC = () => {
   //   setShowPlayerLogin(true);
   // };
 
-  const handleOTPLogin = () => {
-    setShowOTPLogin(true);
-  };
+  // handleOTPLogin removed - SimpleOTPLoginScreen no longer used
 
   const handlePlayerRegistration = () => {
     setShowPlayerRegistration(true);
@@ -291,7 +287,7 @@ const HomeScreen: React.FC = () => {
   const handleLoginSuccess = (player: PlayerRegistration) => {
     setCurrentPlayer(player);
     // setShowPlayerLogin(false);
-    setShowOTPLogin(false);
+    // setShowOTPLogin(false); // SimpleOTPLoginScreen no longer used
   };
 
   const handleRegistrationComplete = (player: PlayerRegistration) => {
@@ -299,11 +295,7 @@ const HomeScreen: React.FC = () => {
     setShowPlayerRegistration(false);
   };
 
-  const handleLogout = async () => {
-    await authService.logout();
-    setCurrentPlayer(null);
-    setShowUserProfile(false);
-  };
+  // handleLogout removed - using handleUserLogout with Firebase logout instead
 
   const handleUserProfile = () => {
     setShowUserProfile(true);
@@ -372,6 +364,14 @@ const HomeScreen: React.FC = () => {
 
   const handleTossBack = () => {
     setShowToss(false);
+  };
+
+  const handleQuickTossPress = () => {
+    setShowQuickToss(true);
+  };
+
+  const handleQuickTossBack = () => {
+    setShowQuickToss(false);
   };
 
   const handleLiveScoringPress = () => {
@@ -536,13 +536,13 @@ const HomeScreen: React.FC = () => {
 
   // Admin Management Handlers
   const handleUserLoginSuccess = () => {
-    setShowLogin(false);
+    // User login handled in App.tsx with PhoneLoginScreen
   };
 
   const handleUserLogout = async () => {
     try {
-      await logout();
-      setShowLogin(true);
+      await logout(); // This is Firebase logout from UserContext
+      // User will be redirected to PhoneLoginScreen automatically by App.tsx
     } catch (error) {
       console.error('Logout error:', error);
       Alert.alert('Error', 'Failed to logout');
@@ -780,12 +780,7 @@ const HomeScreen: React.FC = () => {
     return labels[screenId] || screenId;
   };
 
-  const handleOTPLoginBack = async () => {
-    setShowOTPLogin(false);
-    // Auto-refresh when returning from OTP login
-    console.log('🔄 Returning from OTP login, auto-refreshing data...');
-    await checkAuthentication();
-  };
+  // handleOTPLoginBack removed - SimpleOTPLoginScreen no longer used
 
   const handleRegistrationBack = async () => {
     setShowPlayerRegistration(false);
@@ -837,18 +832,7 @@ const HomeScreen: React.FC = () => {
   //   );
   // }
 
-  if (showOTPLogin) {
-    return (
-      <SimpleOTPLoginScreen
-        onLoginSuccess={handleLoginSuccess}
-        onRegister={() => {
-          setShowOTPLogin(false);
-          setShowPlayerRegistration(true);
-        }}
-        onBack={handleOTPLoginBack}
-      />
-    );
-  }
+  // SimpleOTPLoginScreen removed - using PhoneLoginScreen in App.tsx instead
 
   if (showPlayerRegistration) {
     return (
@@ -863,7 +847,7 @@ const HomeScreen: React.FC = () => {
     return (
         <UserProfileScreen
           onBack={handleProfileBack}
-          onLogout={handleLogout}
+          onLogout={handleUserLogout}
           onProfileUpdated={async () => {
             // Refresh user data when profile is updated
             console.log('🔄 Profile updated, refreshing data...');
@@ -880,6 +864,16 @@ const HomeScreen: React.FC = () => {
         teamA={matchTeams?.teamA || 'Team A'}
         teamB={matchTeams?.teamB || 'Team B'}
         onTossComplete={handleTossComplete}
+      />
+    );
+  }
+
+  if (showQuickToss) {
+    console.log('🪙 Rendering Quick TossScreen');
+    return (
+      <TossScreen
+        onBack={handleQuickTossBack}
+        isQuickToss={true}
       />
     );
   }
@@ -996,10 +990,7 @@ const HomeScreen: React.FC = () => {
     );
   }
 
-  // Show login screen if user is not logged in
-  if (showLogin) {
-    return <UserLoginScreen onLogin={handleUserLoginSuccess} />;
-  }
+  // UserLoginScreen removed - using PhoneLoginScreen in App.tsx instead
 
   // Show enhanced features demo screen
   if (showEnhancedDemo) {
@@ -1324,10 +1315,11 @@ const HomeScreen: React.FC = () => {
       <SideDrawer
         visible={showSideDrawer}
         onClose={handleSideDrawerClose}
-        user={currentPlayer}
+        user={user}
         onProfilePress={handleSideDrawerProfilePress}
-        onLogout={handleLogout}
-        onTossPress={handleTossPress}
+        onLogout={handleUserLogout}
+        onTossPress={handleQuickTossPress}
+        onStartMatchPress={handleStartMatchPress}
         onEnhancedFeaturesPress={handleEnhancedFeaturesPress}
       />
 
