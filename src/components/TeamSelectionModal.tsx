@@ -1,59 +1,85 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  ScrollView,
   TouchableOpacity,
+  StyleSheet,
   Modal,
-  TextInput,
+  FlatList,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { COLORS, SIZES, FONTS } from '../constants';
-import Button from './Button';
-import { TeamSetup } from '../types';
+import { useUser } from '../contexts/UserContext';
+import { teamService, Team } from '../services/teamService';
 
 interface TeamSelectionModalProps {
   visible: boolean;
   onClose: () => void;
-  onTeamSelect: (team: TeamSetup) => void;
-  availableTeams: TeamSetup[];
-  title: string;
-  selectedTeam?: TeamSetup;
+  onTeamSelected: (teamId: string, teamName: string) => void;
+  playerName: string;
 }
 
 const TeamSelectionModal: React.FC<TeamSelectionModalProps> = ({
   visible,
   onClose,
-  onTeamSelect,
-  availableTeams,
-  title,
-  selectedTeam,
+  onTeamSelected,
+  playerName,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const { user } = useUser();
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filteredTeams = availableTeams.filter(team =>
-    team.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    team.shortName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const loadTeams = async () => {
+    if (!user) return;
 
-  const handleTeamSelect = (team: TeamSetup) => {
-    onTeamSelect(team);
+    try {
+      setLoading(true);
+      const teamsData = await teamService.getTeamsByMember(user.phoneNumber);
+      setTeams(teamsData);
+    } catch (error) {
+      console.error('❌ Failed to load teams:', error);
+      Alert.alert('Error', 'Failed to load teams. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (visible) {
+      loadTeams();
+    }
+  }, [visible, user]);
+
+  const handleTeamSelect = (team: Team) => {
+    onTeamSelected(team.id, team.name);
     onClose();
   };
 
-  const getTeamInfo = (team: TeamSetup) => {
-    const playerCount = team.players.length;
-    const playingXICount = team.playingXI.length;
-    const hasCaptain = team.captain !== null;
-    const hasViceCaptain = team.viceCaptain !== null;
+  const renderTeamItem = ({ item: team }: { item: Team }) => {
+    const isOwner = team.ownerId === user?.phoneNumber;
     
-    return {
-      playerCount,
-      playingXICount,
-      hasCaptain,
-      hasViceCaptain,
-      isComplete: playingXICount === 11 && hasCaptain && hasViceCaptain,
-    };
+    return (
+      <TouchableOpacity
+        style={styles.teamItem}
+        onPress={() => handleTeamSelect(team)}
+      >
+        <View style={styles.teamInfo}>
+          <Text style={styles.teamName}>{team.name}</Text>
+          {team.description && (
+            <Text style={styles.teamDescription}>{team.description}</Text>
+          )}
+          {team.location && (
+            <Text style={styles.teamLocation}>📍 {team.location}</Text>
+          )}
+          <Text style={styles.teamId}>ID: {team.id}</Text>
+        </View>
+        <View style={styles.teamStatus}>
+          <Text style={[styles.teamStatusText, isOwner && styles.ownerStatusText]}>
+            {isOwner ? '👑 Owner' : 'Member'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -61,139 +87,41 @@ const TeamSelectionModal: React.FC<TeamSelectionModalProps> = ({
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
+      onRequestClose={onClose}
     >
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>Select a team for the match</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Text style={styles.closeButtonText}>✕</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Select Team</Text>
+          <View style={styles.placeholder} />
         </View>
 
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search teams..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
+        <View style={styles.content}>
+          <Text style={styles.subtitle}>
+            Add <Text style={styles.playerName}>{playerName}</Text> to which team?
+          </Text>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {filteredTeams.map((team) => {
-            const teamInfo = getTeamInfo(team);
-            const isSelected = selectedTeam?.id === team.id;
-            
-            return (
-              <TouchableOpacity
-                key={team.id}
-                style={[
-                  styles.teamCard,
-                  isSelected && styles.selectedTeamCard,
-                ]}
-                onPress={() => handleTeamSelect(team)}
-              >
-                <View style={styles.teamHeader}>
-                  <Text style={styles.teamLogo}>{team.logo}</Text>
-                  <View style={styles.teamInfo}>
-                    <Text style={styles.teamName}>{team.name}</Text>
-                    <Text style={styles.teamShortName}>({team.shortName})</Text>
-                    <Text style={styles.coach}>Coach: {team.coach}</Text>
-                  </View>
-                  {isSelected && (
-                    <Text style={styles.selectedIndicator}>✓</Text>
-                  )}
-                </View>
-
-                <View style={styles.teamStats}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Players:</Text>
-                    <Text style={styles.statValue}>{teamInfo.playerCount}</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Playing XI:</Text>
-                    <Text style={[
-                      styles.statValue,
-                      teamInfo.playingXICount === 11 ? styles.completeStat : styles.incompleteStat
-                    ]}>
-                      {teamInfo.playingXICount}/11
-                    </Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Captain:</Text>
-                    <Text style={[
-                      styles.statValue,
-                      teamInfo.hasCaptain ? styles.completeStat : styles.incompleteStat
-                    ]}>
-                      {teamInfo.hasCaptain ? '✓' : '✗'}
-                    </Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Vice Captain:</Text>
-                    <Text style={[
-                      styles.statValue,
-                      teamInfo.hasViceCaptain ? styles.completeStat : styles.incompleteStat
-                    ]}>
-                      {teamInfo.hasViceCaptain ? '✓' : '✗'}
-                    </Text>
-                  </View>
-                </View>
-
-                {teamInfo.isComplete && (
-                  <View style={styles.completeBadge}>
-                    <Text style={styles.completeText}>✅ Ready to Play</Text>
-                  </View>
-                )}
-
-                {teamInfo.playingXICount < 11 && (
-                  <View style={styles.warningBadge}>
-                    <Text style={styles.warningText}>
-                      ⚠️ Needs {11 - teamInfo.playingXICount} more players
-                    </Text>
-                  </View>
-                )}
-
-                {!teamInfo.hasCaptain && (
-                  <View style={styles.warningBadge}>
-                    <Text style={styles.warningText}>⚠️ Needs Captain</Text>
-                  </View>
-                )}
-
-                {!teamInfo.hasViceCaptain && (
-                  <View style={styles.warningBadge}>
-                    <Text style={styles.warningText}>⚠️ Needs Vice Captain</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-
-          {filteredTeams.length === 0 && (
-            <View style={styles.noResults}>
-              <Text style={styles.noResultsText}>No teams found</Text>
-              <Text style={styles.noResultsSubtext}>
-                Try adjusting your search terms
-              </Text>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.loadingText}>Loading your teams...</Text>
             </View>
+          ) : teams.length === 0 ? (
+            <View style={styles.noTeamsContainer}>
+              <Text style={styles.noTeamsText}>You are not in any teams yet</Text>
+              <Text style={styles.noTeamsSubtext}>Create a team first to add players</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={teams}
+              keyExtractor={(item) => item.id}
+              renderItem={renderTeamItem}
+              style={styles.teamsList}
+              showsVerticalScrollIndicator={false}
+            />
           )}
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <Button
-            title="Cancel"
-            onPress={onClose}
-            variant="outline"
-            size="medium"
-            style={styles.cancelButton}
-          />
-          <Button
-            title="Create New Team"
-            onPress={() => {
-              // This would open a team creation modal
-              // For now, just show an alert
-              onClose();
-            }}
-            size="medium"
-            style={styles.createButton}
-          />
         </View>
       </View>
     </Modal>
@@ -203,166 +131,128 @@ const TeamSelectionModal: React.FC<TeamSelectionModalProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#f5f5f5',
   },
   header: {
-    padding: SIZES.lg,
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: '#e0e0e0',
+  },
+  closeButton: {
+    padding: 5,
+  },
+  closeButtonText: {
+    fontSize: 18,
+    color: '#666',
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SIZES.xs,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
   },
-  subtitle: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-  },
-  searchContainer: {
-    padding: SIZES.lg,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: SIZES.sm,
-    padding: SIZES.md,
-    fontSize: 16,
-    backgroundColor: COLORS.background,
-    color: COLORS.text,
+  placeholder: {
+    width: 30,
   },
   content: {
     flex: 1,
-    padding: SIZES.lg,
+    padding: 20,
   },
-  teamCard: {
-    backgroundColor: COLORS.surface,
-    padding: SIZES.lg,
-    borderRadius: SIZES.md,
-    marginBottom: SIZES.md,
-    borderWidth: 2,
-    borderColor: COLORS.border,
+  subtitle: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 20,
+    textAlign: 'center',
   },
-  selectedTeamCard: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '10',
+  playerName: {
+    fontWeight: '600',
+    color: '#007AFF',
   },
-  teamHeader: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  noTeamsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noTeamsText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  noTeamsSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  teamsList: {
+    flex: 1,
+  },
+  teamItem: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: SIZES.md,
-  },
-  teamLogo: {
-    fontSize: 48,
-    marginRight: SIZES.md,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   teamInfo: {
     flex: 1,
   },
   teamName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SIZES.xs,
-  },
-  teamShortName: {
     fontSize: 16,
-    color: COLORS.textSecondary,
-    marginBottom: SIZES.xs,
-  },
-  coach: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-  },
-  selectedIndicator: {
-    fontSize: 24,
-    color: COLORS.primary,
-    fontWeight: 'bold',
-  },
-  teamStats: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SIZES.md,
-    marginBottom: SIZES.sm,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: '45%',
-  },
-  statLabel: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginRight: SIZES.xs,
-  },
-  statValue: {
-    fontSize: 14,
     fontWeight: '600',
-    color: COLORS.text,
+    color: '#333',
+    marginBottom: 4,
   },
-  completeStat: {
-    color: COLORS.success,
-  },
-  incompleteStat: {
-    color: COLORS.error,
-  },
-  completeBadge: {
-    backgroundColor: COLORS.success + '20',
-    padding: SIZES.sm,
-    borderRadius: SIZES.xs,
-    marginTop: SIZES.sm,
-  },
-  completeText: {
-    color: COLORS.success,
+  teamDescription: {
     fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  teamLocation: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 4,
+  },
+  teamId: {
+    fontSize: 12,
+    color: '#999',
+  },
+  teamStatus: {
+    backgroundColor: '#28a745',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  teamStatusText: {
+    color: 'white',
+    fontSize: 12,
     fontWeight: '600',
-    textAlign: 'center',
   },
-  warningBadge: {
-    backgroundColor: COLORS.error + '20',
-    padding: SIZES.sm,
-    borderRadius: SIZES.xs,
-    marginTop: SIZES.sm,
-  },
-  warningText: {
-    color: COLORS.error,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  noResults: {
-    alignItems: 'center',
-    padding: SIZES.xl,
-  },
-  noResultsText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SIZES.sm,
-  },
-  noResultsSubtext: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  footer: {
-    flexDirection: 'row',
-    padding: SIZES.lg,
-    backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    gap: SIZES.md,
-  },
-  cancelButton: {
-    flex: 1,
-  },
-  createButton: {
-    flex: 1,
+  ownerStatusText: {
+    color: '#333',
   },
 });
 

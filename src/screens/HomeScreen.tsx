@@ -19,14 +19,14 @@ import Button from '../components/Button';
 import BottomNavigation from '../components/BottomNavigation';
 import TopNavigation from '../components/TopNavigation';
 import { useUser } from '../contexts/UserContext';
-import UserLoginScreen from './UserLoginScreen';
+// UserLoginScreen removed - using PhoneLoginScreen in App.tsx instead
 import AdminManagement from '../components/AdminManagement';
 import BreadcrumbNavigation from '../components/BreadcrumbNavigation';
 import SideDrawer from '../components/SideDrawer';
 // import LiveMatchesList from '../components/LiveMatchesList';
 // import MatchDetailScreen from './MatchDetailScreen';
 // import PlayerLoginScreen from './PlayerLoginScreen';
-import SimpleOTPLoginScreen from './SimpleOTPLoginScreen';
+// SimpleOTPLoginScreen removed - using PhoneLoginScreen instead
 import PlayerRegistrationScreen from './PlayerRegistrationScreen';
 import UserProfileScreen from './UserProfileScreen';
 import TossScreen from './TossScreen';
@@ -41,7 +41,13 @@ import MatchDetailsModal from '../components/MatchDetailsModal';
 import TeamSelectionScreen from './TeamSelectionScreen';
 import NotificationTestScreen from './NotificationTestScreen';
 import EnhancedFeaturesDemoScreen from './EnhancedFeaturesDemoScreen';
-// import PlayerSearchScreen from './PlayerSearchScreen';
+import PlayerSearchScreen from './PlayerSearchScreen';
+import TeamCreationScreen from './TeamCreationScreen';
+import MyTeamsScreen from './MyTeamsScreen';
+import TermsOfServiceScreen from './TermsOfServiceScreen';
+import RateUsScreen from './RateUsScreen';
+import SuperAdminScreen from './SuperAdminScreen';
+import PrivacyPolicyScreen from './PrivacyPolicyScreen';
 // import TeamCreationScreen from './TeamCreationScreen';
 // import { apiService } from '../services/api';
 import { authService } from '../services/authService';
@@ -141,10 +147,11 @@ const HomeScreen: React.FC = () => {
   const [currentPlayer, setCurrentPlayer] = useState<PlayerRegistration | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showOTPLogin, setShowOTPLogin] = useState(false);
+  // showOTPLogin removed - using PhoneLoginScreen in App.tsx instead
   const [showPlayerRegistration, setShowPlayerRegistration] = useState(false);
   const [showUserProfile, setShowUserProfile] = useState(false);
   const [showToss, setShowToss] = useState(false);
+  const [showQuickToss, setShowQuickToss] = useState(false);
   const [showLiveScoring, setShowLiveScoring] = useState(false);
   const [showMatchManagement, setShowMatchManagement] = useState(false);
   const [showStartMatch, setShowStartMatch] = useState(false);
@@ -156,10 +163,16 @@ const HomeScreen: React.FC = () => {
   const [sessionMatchId, setSessionMatchId] = useState<string | null>(null);
   const [matchTeams, setMatchTeams] = useState<{teamA: string, teamB: string} | null>(null);
   const [tossResult, setTossResult] = useState<{winner: string, decision: string} | null>(null);
+  const [matchSetupData, setMatchSetupData] = useState<{
+    battingOrder: string[];
+    bowlingOrder: string[];
+    teamAPlayers: any[];
+    teamBPlayers: any[];
+  } | null>(null);
   
   // User and Admin Management
   const { user, logout } = useUser();
-  const [showLogin, setShowLogin] = useState(false);
+  // showLogin removed - using PhoneLoginScreen in App.tsx instead
   const [showAdminManagement, setShowAdminManagement] = useState(false);
   const [selectedTeamForAdmin, setSelectedTeamForAdmin] = useState<{id: string, name: string} | null>(null);
   
@@ -176,16 +189,38 @@ const HomeScreen: React.FC = () => {
   
   // Enhanced Features Demo
   const [showEnhancedDemo, setShowEnhancedDemo] = useState(false);
+  
+  // Player Search
+  const [showPlayerSearch, setShowPlayerSearch] = useState(false);
+  const [selectedTeamForPlayerSearch, setSelectedTeamForPlayerSearch] = useState<{id: string, name: string} | null>(null);
+  const [showTeamCreation, setShowTeamCreation] = useState(false);
+  const [showMyTeams, setShowMyTeams] = useState(false);
+  const [showTermsOfService, setShowTermsOfService] = useState(false);
+  const [showRateUs, setShowRateUs] = useState(false);
+  const [showSuperAdmin, setShowSuperAdmin] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+
+  // Helper functions for navigation stack
+  const pushToStack = (screen: string) => {
+    setNavigationStack(prev => [...prev, screen]);
+  };
+
+  const popFromStack = () => {
+    const prevScreen = navigationStack[navigationStack.length - 1];
+    setNavigationStack(prev => prev.slice(0, -1));
+    return prevScreen;
+  };
+
+  const getPreviousScreen = () => {
+    return navigationStack[navigationStack.length - 1];
+  };
 
   useEffect(() => {
     // loadAsiaCupMatches();
     checkAuthentication();
     loadMatchState();
     
-    // Check if user is logged in
-    if (!user) {
-      setShowLogin(true);
-    }
+    // User authentication handled in App.tsx with PhoneLoginScreen
   }, [user]);
 
   // Load match state from localStorage on app start
@@ -266,9 +301,7 @@ const HomeScreen: React.FC = () => {
   //   setShowPlayerLogin(true);
   // };
 
-  const handleOTPLogin = () => {
-    setShowOTPLogin(true);
-  };
+  // handleOTPLogin removed - SimpleOTPLoginScreen no longer used
 
   const handlePlayerRegistration = () => {
     setShowPlayerRegistration(true);
@@ -285,7 +318,7 @@ const HomeScreen: React.FC = () => {
   const handleLoginSuccess = (player: PlayerRegistration) => {
     setCurrentPlayer(player);
     // setShowPlayerLogin(false);
-    setShowOTPLogin(false);
+    // setShowOTPLogin(false); // SimpleOTPLoginScreen no longer used
   };
 
   const handleRegistrationComplete = (player: PlayerRegistration) => {
@@ -293,13 +326,10 @@ const HomeScreen: React.FC = () => {
     setShowPlayerRegistration(false);
   };
 
-  const handleLogout = async () => {
-    await authService.logout();
-    setCurrentPlayer(null);
-    setShowUserProfile(false);
-  };
+  // handleLogout removed - using handleUserLogout with Firebase logout instead
 
   const handleUserProfile = () => {
+    pushToStack('home');
     setShowUserProfile(true);
   };
 
@@ -307,6 +337,22 @@ const HomeScreen: React.FC = () => {
     setShowUserProfile(false);
     // Auto-refresh user data when returning from profile
     console.log('🔄 Returning from profile, auto-refreshing data...');
+    
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      // Stay on home screen (default behavior)
+      console.log('🏠 Returning to home screen');
+    } else {
+      // Default fallback to side drawer
+      setShowSideDrawer(true);
+    }
+    
     await checkAuthentication();
   };
 
@@ -356,6 +402,7 @@ const HomeScreen: React.FC = () => {
   };
 
   const handleSideDrawerProfilePress = () => {
+    pushToStack('sideDrawer');
     setShowSideDrawer(false);
     setShowUserProfile(true);
   };
@@ -366,6 +413,14 @@ const HomeScreen: React.FC = () => {
 
   const handleTossBack = () => {
     setShowToss(false);
+  };
+
+  const handleQuickTossPress = () => {
+    setShowQuickToss(true);
+  };
+
+  const handleQuickTossBack = () => {
+    setShowQuickToss(false);
   };
 
   const handleLiveScoringPress = () => {
@@ -439,6 +494,161 @@ const HomeScreen: React.FC = () => {
     setShowEnhancedDemo(false);
   };
 
+  // Player Search handlers
+  const handlePlayerSearch = (teamId: string, teamName: string) => {
+    console.log('🔍 Opening player search for team:', teamName);
+    setSelectedTeamForPlayerSearch({ id: teamId, name: teamName });
+    setShowPlayerSearch(true);
+  };
+
+  const handlePlayerSearchBack = () => {
+    setShowPlayerSearch(false);
+    setSelectedTeamForPlayerSearch(null);
+  };
+
+  const handlePlayerAdded = async (player: any) => {
+    try {
+      console.log('✅ Player added to team:', player.name);
+      
+      // TODO: Implement actual team management
+      // For now, just log the addition
+      // In a real app, you would:
+      // 1. Add player to team in Firebase
+      // 2. Update team state
+      // 3. Refresh team data
+      
+      console.log(`📝 Player ${player.name} should be added to team ${selectedTeamForPlayerSearch?.name}`);
+    } catch (error) {
+      console.error('❌ Failed to add player to team:', error);
+    }
+  };
+
+  const handleCreateTeam = () => {
+    setShowTeamCreation(true);
+  };
+
+  const handleTeamCreated = (teamId: string) => {
+    setShowTeamCreation(false);
+    // Navigate to My Teams to show the newly created team
+    setShowMyTeams(true);
+  };
+
+  const handleMyTeams = () => {
+    setShowMyTeams(true);
+  };
+
+  const handleTeamCreationBack = () => {
+    setShowTeamCreation(false);
+  };
+
+  const handleMyTeamsBack = () => {
+    setShowMyTeams(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      // Stay on home screen (default behavior)
+      console.log('🏠 Returning to home screen');
+    } else {
+      // Default fallback to side drawer
+      setShowSideDrawer(true);
+    }
+  };
+
+  const handleTermsOfServiceBack = () => {
+    setShowTermsOfService(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      console.log('🏠 Returning to home screen');
+    }
+  };
+
+  const handleTermsOfServicePress = () => {
+    pushToStack('sideDrawer');
+    setShowTermsOfService(true);
+    setShowSideDrawer(false);
+  };
+
+  const handleRateUsBack = () => {
+    setShowRateUs(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      console.log('🏠 Returning to home screen');
+    }
+  };
+
+  const handleRateUsPress = () => {
+    console.log('🎯 Rate Us pressed - opening screen');
+    pushToStack('sideDrawer');
+    setShowRateUs(true);
+    setShowSideDrawer(false);
+  };
+
+  const handleSuperAdminPress = () => {
+    console.log('👑 Super Admin pressed - opening screen');
+    pushToStack('sideDrawer');
+    setShowSuperAdmin(true);
+    setShowSideDrawer(false);
+  };
+
+  const handleSuperAdminBack = () => {
+    setShowSuperAdmin(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      console.log('🏠 Returning to home screen');
+    }
+  };
+
+  const handlePrivacyPolicyPress = () => {
+    console.log('🔒 Privacy Policy pressed - opening screen');
+    pushToStack('sideDrawer');
+    setShowPrivacyPolicy(true);
+    setShowSideDrawer(false);
+  };
+
+  const handlePrivacyPolicyBack = () => {
+    setShowPrivacyPolicy(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      console.log('🏠 Returning to home screen');
+    }
+  };
+
+  const handleFindPlayersPress = () => {
+    console.log('🔍 Find Players pressed - opening screen');
+    pushToStack('sideDrawer');
+    setShowPlayerSearch(true);
+    setShowSideDrawer(false);
+  };
+
   const handleStartMatchNext = async (teamA: string, teamB: string) => {
     // Create ONE match ID for the entire session
     const newMatchId = `match-${Date.now()}`;
@@ -476,18 +686,27 @@ const HomeScreen: React.FC = () => {
     setShowToss(true);
   };
 
-  const handleMatchSetupComplete = async () => {
+  const handleMatchSetupComplete = async (setupData: {
+    battingOrder: string[];
+    bowlingOrder: string[];
+    teamAPlayers: any[];
+    teamBPlayers: any[];
+  }) => {
+    // Store the setup data
+    setMatchSetupData(setupData);
+    
     // Use the session match ID (should already be set)
     const matchId = selectedMatchId || sessionMatchId;
     console.log('🏏 Using match ID for live scoring:', matchId);
+    console.log('🏏 Match setup data:', setupData);
     
     // Create the match in Firebase BEFORE going to live scoring
     try {
       const { liveScoringService } = await import('../services/liveScoringService');
       const createdMatchId = await liveScoringService.createMatch({
         name: `${matchTeams?.teamA || 'Team A'} vs ${matchTeams?.teamB || 'Team B'}`,
-        team1: { id: 'team1', name: matchTeams?.teamA || 'Team A', players: [] },
-        team2: { id: 'team2', name: matchTeams?.teamB || 'Team B', players: [] },
+        team1: { id: 'team1', name: matchTeams?.teamA || 'Team A', players: setupData.teamAPlayers },
+        team2: { id: 'team2', name: matchTeams?.teamB || 'Team B', players: setupData.teamBPlayers },
         matchType: 'T20',
         totalOvers: 20,
         currentInnings: 1,
@@ -521,13 +740,13 @@ const HomeScreen: React.FC = () => {
 
   // Admin Management Handlers
   const handleUserLoginSuccess = () => {
-    setShowLogin(false);
+    // User login handled in App.tsx with PhoneLoginScreen
   };
 
   const handleUserLogout = async () => {
     try {
-      await logout();
-      setShowLogin(true);
+      await logout(); // This is Firebase logout from UserContext
+      // User will be redirected to PhoneLoginScreen automatically by App.tsx
     } catch (error) {
       console.error('Logout error:', error);
       Alert.alert('Error', 'Failed to logout');
@@ -765,12 +984,7 @@ const HomeScreen: React.FC = () => {
     return labels[screenId] || screenId;
   };
 
-  const handleOTPLoginBack = async () => {
-    setShowOTPLogin(false);
-    // Auto-refresh when returning from OTP login
-    console.log('🔄 Returning from OTP login, auto-refreshing data...');
-    await checkAuthentication();
-  };
+  // handleOTPLoginBack removed - SimpleOTPLoginScreen no longer used
 
   const handleRegistrationBack = async () => {
     setShowPlayerRegistration(false);
@@ -822,18 +1036,7 @@ const HomeScreen: React.FC = () => {
   //   );
   // }
 
-  if (showOTPLogin) {
-    return (
-      <SimpleOTPLoginScreen
-        onLoginSuccess={handleLoginSuccess}
-        onRegister={() => {
-          setShowOTPLogin(false);
-          setShowPlayerRegistration(true);
-        }}
-        onBack={handleOTPLoginBack}
-      />
-    );
-  }
+  // SimpleOTPLoginScreen removed - using PhoneLoginScreen in App.tsx instead
 
   if (showPlayerRegistration) {
     return (
@@ -848,7 +1051,7 @@ const HomeScreen: React.FC = () => {
     return (
         <UserProfileScreen
           onBack={handleProfileBack}
-          onLogout={handleLogout}
+          onLogout={handleUserLogout}
           onProfileUpdated={async () => {
             // Refresh user data when profile is updated
             console.log('🔄 Profile updated, refreshing data...');
@@ -865,6 +1068,16 @@ const HomeScreen: React.FC = () => {
         teamA={matchTeams?.teamA || 'Team A'}
         teamB={matchTeams?.teamB || 'Team B'}
         onTossComplete={handleTossComplete}
+      />
+    );
+  }
+
+  if (showQuickToss) {
+    console.log('🪙 Rendering Quick TossScreen');
+    return (
+      <TossScreen
+        onBack={handleQuickTossBack}
+        isQuickToss={true}
       />
     );
   }
@@ -981,10 +1194,7 @@ const HomeScreen: React.FC = () => {
     );
   }
 
-  // Show login screen if user is not logged in
-  if (showLogin) {
-    return <UserLoginScreen onLogin={handleUserLoginSuccess} />;
-  }
+  // UserLoginScreen removed - using PhoneLoginScreen in App.tsx instead
 
   // Show enhanced features demo screen
   if (showEnhancedDemo) {
@@ -998,6 +1208,74 @@ const HomeScreen: React.FC = () => {
         currentUserName={user?.phoneNumber || currentPlayer?.name || 'Player'}
         currentUserPhone={user?.phoneNumber || ''}
         isPro={false} // Set to true to test PRO features, false to test FREE user experience
+      />
+    );
+  }
+
+  // Show player search screen
+  if (showPlayerSearch && selectedTeamForPlayerSearch) {
+    return (
+      <PlayerSearchScreen
+        teamId={selectedTeamForPlayerSearch.id}
+        teamName={selectedTeamForPlayerSearch.name}
+        onPlayerAdded={handlePlayerAdded}
+        onBack={handlePlayerSearchBack}
+      />
+    );
+  }
+
+  // Show Team Creation Screen
+  if (showTeamCreation) {
+    return (
+      <TeamCreationScreen
+        onBack={handleTeamCreationBack}
+        onTeamCreated={handleTeamCreated}
+      />
+    );
+  }
+
+  // Show My Teams Screen
+  if (showMyTeams) {
+    return (
+      <MyTeamsScreen
+        onBack={handleMyTeamsBack}
+        onCreateTeam={handleCreateTeam}
+      />
+    );
+  }
+
+  // Show Terms of Service Screen
+  if (showTermsOfService) {
+    return (
+      <TermsOfServiceScreen
+        onBack={handleTermsOfServiceBack}
+      />
+    );
+  }
+
+  // Show Rate Us Screen
+  if (showRateUs) {
+    return (
+      <RateUsScreen
+        onBack={handleRateUsBack}
+      />
+    );
+  }
+
+  // Show Super Admin Screen (only for Super Admin)
+  if (showSuperAdmin && user?.isSuperAdmin) {
+    return (
+      <SuperAdminScreen
+        onBack={handleSuperAdminBack}
+      />
+    );
+  }
+
+  // Show Privacy Policy Screen
+  if (showPrivacyPolicy) {
+    return (
+      <PrivacyPolicyScreen
+        onBack={handlePrivacyPolicyBack}
       />
     );
   }
@@ -1309,11 +1587,17 @@ const HomeScreen: React.FC = () => {
       <SideDrawer
         visible={showSideDrawer}
         onClose={handleSideDrawerClose}
-        user={currentPlayer}
+        user={user}
         onProfilePress={handleSideDrawerProfilePress}
-        onLogout={handleLogout}
-        onTossPress={handleTossPress}
+        onLogout={handleUserLogout}
+        onTossPress={handleQuickTossPress}
+        onStartMatchPress={handleStartMatchPress}
         onEnhancedFeaturesPress={handleEnhancedFeaturesPress}
+        onFindPlayersPress={() => handlePlayerSearch('find-players', 'Find Players')}
+        onCreateTeamPress={handleCreateTeam}
+        onMyTeamsPress={handleMyTeams}
+        onTermsOfServicePress={handleTermsOfServicePress}
+        onRateUsPress={handleRateUsPress}
       />
 
       {/* Match Details Modal */}
@@ -1323,6 +1607,26 @@ const HomeScreen: React.FC = () => {
           onClose={() => setShowMatchDetails(false)}
         />
       )}
+
+      {/* Side Drawer */}
+      <SideDrawer
+        visible={showSideDrawer}
+        onClose={handleSideDrawerClose}
+        user={user}
+        onProfilePress={handleSideDrawerProfilePress}
+        onLogout={handleUserLogout}
+        onTossPress={handleQuickTossPress}
+        onStartMatchPress={handleStartMatchPress}
+        onNotificationTestPress={handleNotificationTestPress}
+        onEnhancedFeaturesPress={handleEnhancedFeaturesPress}
+        onFindPlayersPress={handleFindPlayersPress}
+        onCreateTeamPress={handleCreateTeam}
+        onMyTeamsPress={handleMyTeams}
+        onTermsOfServicePress={handleTermsOfServicePress}
+        onRateUsPress={handleRateUsPress}
+        onSuperAdminPress={handleSuperAdminPress}
+        onPrivacyPolicyPress={handlePrivacyPolicyPress}
+      />
     </SafeAreaView>
   );
 };

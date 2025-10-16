@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,12 @@ interface MatchSetupScreenProps {
   tossWinner: string;
   tossDecision: string;
   onBack: () => void;
-  onStartMatch: () => void;
+  onStartMatch: (setupData: {
+    battingOrder: string[];
+    bowlingOrder: string[];
+    teamAPlayers: any[];
+    teamBPlayers: any[];
+  }) => void;
 }
 
 interface Player {
@@ -70,6 +75,11 @@ const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({
   const [currentSetup, setCurrentSetup] = useState<'batting' | 'bowling'>('batting');
   const scrollViewRef = useRef<ScrollView>(null);
 
+  // Scroll to top whenever currentSetup changes
+  useEffect(() => {
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+  }, [currentSetup]);
+
   const getCurrentTeamPlayers = () => {
     return currentSetup === 'batting' ? teamAPlayers : teamBPlayers;
   };
@@ -96,18 +106,19 @@ const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({
         Alert.alert('Error', 'Please select at least 2 batsmen');
         return;
       }
-      // Scroll to top FIRST, then change setup
-      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-      // Small delay to ensure scroll completes before changing setup
-      setTimeout(() => {
-        setCurrentSetup('bowling');
-      }, 50);
+      setCurrentSetup('bowling');
     } else {
       if (bowlingOrder.length < 1) {
         Alert.alert('Error', 'Please select at least 1 bowler');
         return;
       }
-      onStartMatch();
+      // Pass the setup data to the parent
+      onStartMatch({
+        battingOrder,
+        bowlingOrder,
+        teamAPlayers,
+        teamBPlayers,
+      });
     }
   };
 

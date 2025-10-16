@@ -14,8 +14,9 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { COLORS, SIZES, FONTS } from '../constants';
 import Button from '../components/Button';
-import { authService } from '../services/authService';
-import { PlayerRegistration } from '../types';
+import { useUser } from '../contexts/UserContext';
+import { userProfileService, UserProfile } from '../services/userProfileService';
+import { imageUploadService } from '../services/imageUploadService';
 
 interface UserProfileScreenProps {
   onBack: () => void;
@@ -24,28 +25,59 @@ interface UserProfileScreenProps {
 }
 
 const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onLogout, onProfileUpdated }) => {
-  const [user, setUser] = useState<PlayerRegistration | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, updateUserProfile } = useUser();
+  const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [userTeams, setUserTeams] = useState<{ teamId: string; teamName: string; joinedAt: string }[]>([]);
 
-  // Form state
+  // Form state - using new profile structure
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    phone: '',
-    location: '',
-    preferredRole: 'batsman' as 'batsman' | 'bowler' | 'all-rounder' | 'wicket-keeper',
+    phoneNumber: '',
     dateOfBirth: '',
-    battingStyle: 'right-handed' as 'right-handed' | 'left-handed',
-    bowlingStyle: 'right-arm fast' as 'right-arm fast' | 'left-arm fast' | 'right-arm spin' | 'left-arm spin',
+    playingRole: null as 'batsman' | 'bowler' | 'all-rounder' | 'wicket-keeper' | null,
+    battingHand: null as 'left' | 'right' | null,
+    bowlingStyle: null as 'fast' | 'medium' | 'spin' | null,
+    jerseyNumber: null as number | null,
   });
+
+  // Validation state
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
 
   useEffect(() => {
     loadUserProfile();
     requestPermissions();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      loadUserTeams();
+    }
+  }, [user]);
+
+  const loadUserTeams = async () => {
+    if (!user) return;
+    
+    try {
+      const teams = await userProfileService.getUserTeams(user.phoneNumber);
+      setUserTeams(teams);
+    } catch (error) {
+      console.error('❌ Failed to load user teams:', error);
+      setUserTeams([]);
+    }
+  };
+
+  // Debug log to see current formData values (only in development)
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('🔍 Current formData values:', formData);
+    }
+  }, [formData]);
+
 
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -56,139 +88,188 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onLogout,
 
   const loadUserProfile = async () => {
     try {
-      console.log('🔄 Loading user profile...');
       setLoading(true);
-      const currentUser = await authService.getCurrentUser();
-      console.log('👤 Current user from authService:', currentUser);
       
-      if (currentUser) {
-        console.log('✅ User found, setting form data');
-        setUser(currentUser);
+      if (user && user.profile) {
         const formDataToSet = {
-          name: currentUser.name,
-          email: currentUser.email,
-          phone: currentUser.phone,
-          location: currentUser.location,
-          preferredRole: currentUser.preferredRole,
-          dateOfBirth: currentUser.dateOfBirth,
-          battingStyle: currentUser.battingStyle,
-          bowlingStyle: currentUser.bowlingStyle || 'right-arm fast',
+          name: user.profile.name || user.name || '',
+          email: user.profile.email || '',
+          phoneNumber: user.phoneNumber || '',
+          dateOfBirth: user.profile.dateOfBirth || '',
+          playingRole: user.profile.playingRole || null,
+          battingHand: user.profile.battingHand || null,
+          bowlingStyle: user.profile.bowlingStyle || null,
+          jerseyNumber: user.profile.jerseyNumber || null,
         };
-        console.log('📝 Form data to set:', formDataToSet);
         setFormData(formDataToSet);
-
-        // Load profile image if exists
-        if (currentUser.profileImage) {
-          setProfileImage(currentUser.profileImage);
-          console.log('🖼️ Profile image loaded:', currentUser.profileImage.substring(0, 50) + '...');
+        // Load profile image from Firebase Storage if available
+        if (user.profile.profilePicture) {
+          setProfileImage(user.profile.profilePicture);
         } else {
+          // Try to get image from Firebase Storage
+          try {
+            const imageURL = await imageUploadService.getProfilePictureURL(user.phoneNumber);
+            setProfileImage(imageURL);
+          } catch (error) {
+            setProfileImage(null);
+          }
+        }
+      } else if (user) {
+        // Load from userProfileService if profile not loaded in context
+        const profile = await userProfileService.getUserProfile(user.phoneNumber);
+        if (profile) {
+          const formDataToSet = {
+            name: profile.name || user.name || '',
+            email: profile.email || '',
+            phoneNumber: profile.phoneNumber || user.phoneNumber || '',
+            dateOfBirth: profile.dateOfBirth || '',
+            playingRole: profile.playingRole || null,
+            battingHand: profile.battingHand || null,
+            bowlingStyle: profile.bowlingStyle || null,
+            jerseyNumber: profile.jerseyNumber || null,
+          };
+          setFormData(formDataToSet);
+          // Load profile image from Firebase Storage if available
+          if (profile.profilePicture) {
+            setProfileImage(profile.profilePicture);
+          } else {
+            // Try to get image from Firebase Storage
+            try {
+              const imageURL = await imageUploadService.getProfilePictureURL(user.phoneNumber);
+              setProfileImage(imageURL);
+            } catch (error) {
+              setProfileImage(null);
+            }
+          }
+        } else {
+          // No profile exists yet, use basic user data
+          setFormData({
+            name: user.name || `User ${user.phoneNumber}`,
+            email: '',
+            phoneNumber: user.phoneNumber || '',
+            dateOfBirth: '',
+            playingRole: null,
+            battingHand: null,
+            bowlingStyle: null,
+            jerseyNumber: null,
+          });
           setProfileImage(null);
-          console.log('🖼️ No profile image found');
         }
       } else {
-        console.log('❌ No user found in authService.getCurrentUser()');
+        console.log('❌ No user found in context');
+        // Set default values even without user
+        setFormData({
+          name: '',
+          email: '',
+          phoneNumber: '',
+          dateOfBirth: '',
+          playingRole: null,
+          battingHand: null,
+          bowlingStyle: null,
+          jerseyNumber: null,
+        });
+        setProfileImage(null);
       }
     } catch (error) {
       console.error('❌ Error loading user profile:', error);
-      Alert.alert('Error', 'Failed to load profile');
+      Alert.alert('Error', 'Failed to load user profile');
     } finally {
-      console.log('🏁 Loading completed');
       setLoading(false);
     }
   };
 
+  const validateForm = (): boolean => {
+    const errors: {[key: string]: string} = {};
+    
+    // Name is required
+    if (!formData.name.trim()) {
+      errors.name = 'Name is required';
+    }
+    
+    // Phone number validation (required)
+    if (!formData.phoneNumber.trim()) {
+      errors.phoneNumber = 'Phone number is required';
+    } else if (!/^\+91\d{10}$/.test(formData.phoneNumber)) {
+      errors.phoneNumber = 'Phone number must be in format +91xxxxxxxxxx';
+    }
+    
+    // Email validation (optional but if provided, must be valid)
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+    
+    // Jersey number validation (optional but if provided, must be positive)
+    if (formData.jerseyNumber && (formData.jerseyNumber < 1 || formData.jerseyNumber > 999)) {
+      errors.jerseyNumber = 'Jersey number must be between 1 and 999';
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSave = async () => {
+    if (!validateForm()) {
+      Alert.alert('Validation Error', 'Please fix the errors before saving');
+      return;
+    }
+
     try {
-      console.log('💾 handleSave called');
-      console.log('📝 Current formData state:', formData);
       setSaving(true);
-      console.log('🔄 Setting saving to true');
-      
-      // Validate required fields
-      console.log('🔍 Validating form data:', { name: formData.name, email: formData.email });
-      if (!formData.name.trim() || !formData.email.trim()) {
-        console.log('❌ Validation failed - missing name or email');
-        Alert.alert('Validation Error', 'Name and email are required');
-        setSaving(false);
-        return;
-      }
-      console.log('✅ Validation passed');
 
-      console.log('📝 Form data:', formData);
-      console.log('🖼️ Profile image:', profileImage ? 'Has image' : 'No image');
-
-      // Update user profile
-      const updatedUser = {
-        ...user!,
-        ...formData,
-        profileImage: profileImage || undefined,
+      // Prepare profile data for update (don't include phoneNumber as it's the document ID)
+      const profileUpdateData: Partial<UserProfile> = {
+        name: formData.name.trim(),
+        email: formData.email.trim() || null,
+        dateOfBirth: formData.dateOfBirth || null,
+        playingRole: formData.playingRole,
+        battingHand: formData.battingHand,
+        bowlingStyle: formData.bowlingStyle,
+        jerseyNumber: formData.jerseyNumber,
+        profilePicture: profileImage, // This will be the Firebase Storage URL
+        hasCompletedProfile: true,
       };
 
-      console.log('👤 Updated user:', { name: updatedUser.name, hasProfileImage: !!updatedUser.profileImage });
-
-      // Update the user in Firebase
-      console.log('🔄 Calling authService.updateUserProfile...');
-      await authService.updateUserProfile(updatedUser);
-      console.log('✅ authService.updateUserProfile completed');
+      // Update profile using UserContext
+      await updateUserProfile(profileUpdateData);
       
-      // Update local state
-      console.log('🔄 Updating local state...');
-      setUser(updatedUser);
       setEditing(false);
-      console.log('✅ Local state updated');
       
-      // Notify parent component that profile was updated
-      if (onProfileUpdated) {
-        console.log('📢 Notifying parent component...');
-        onProfileUpdated();
-        console.log('✅ Parent component notified');
-      }
+      // Refresh team data after profile update
+      await loadUserTeams();
       
-      console.log('🎉 Profile save completed successfully');
       Alert.alert('Success', 'Profile updated successfully!');
+      
+      if (onProfileUpdated) {
+        onProfileUpdated();
+      }
     } catch (error) {
       console.error('❌ Error saving profile:', error);
-      console.error('❌ Error details:', error instanceof Error ? error.message : 'Unknown error');
-      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      Alert.alert('Error', 'Failed to save profile');
+      Alert.alert('Error', 'Failed to save profile. Please try again.');
     } finally {
-      console.log('🏁 Setting saving to false');
       setSaving(false);
     }
   };
 
   const handleCancel = () => {
-    // Reset form data to current user data
-    if (user) {
-      setFormData({
-        name: user.name || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        location: user.location || '',
-        preferredRole: user.preferredRole || 'batsman',
-        dateOfBirth: user.dateOfBirth || '',
-        battingStyle: user.battingStyle || 'right-handed',
-        bowlingStyle: user.bowlingStyle || 'right-arm fast',
-      });
-    }
     setEditing(false);
+    setValidationErrors({});
+    loadUserProfile(); // Reload original data
   };
 
   const handleEdit = () => {
-    // Load current user data into form when editing starts
-    if (user) {
-      setFormData({
-        name: user.name || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        location: user.location || '',
-        preferredRole: user.preferredRole || 'batsman',
-        dateOfBirth: user.dateOfBirth || '',
-        battingStyle: user.battingStyle || 'right-handed',
-        bowlingStyle: user.bowlingStyle || 'right-arm fast',
-      });
-    }
     setEditing(true);
+    setValidationErrors({});
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Logout', style: 'destructive', onPress: onLogout }
+      ]
+    );
   };
 
   const handleImagePicker = async () => {
@@ -198,78 +279,116 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onLogout,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
-        base64: true, // This will help with cross-platform compatibility
       });
 
       if (!result.canceled && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
-        const base64 = result.assets[0].base64;
         
-        // Create a data URI that works across platforms
-        const dataUri = `data:image/jpeg;base64,${base64}`;
-        setProfileImage(dataUri);
+        // Show loading state
+        setLoading(true);
         
-        console.log('Image selected:', { uri: imageUri, base64: base64 ? 'present' : 'missing' });
+        try {
+          // Upload image to Firebase Storage
+          const downloadURL = await imageUploadService.uploadProfilePicture(
+            user?.phoneNumber || 'unknown',
+            result.assets[0].uri
+          );
+          
+          setProfileImage(downloadURL);
+          
+        } catch (uploadError) {
+          console.error('❌ Failed to upload image:', uploadError);
+          Alert.alert('Upload Failed', 'Failed to upload image. Please try again.');
+        } finally {
+          setLoading(false);
+        }
+      } else {
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
+      console.error('❌ Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      setLoading(false);
     }
   };
 
-  const handleDeleteImage = async () => {
-    Alert.alert(
-      'Delete Profile Picture',
-      'Are you sure you want to delete your profile picture?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('🗑️ Deleting profile image...');
-              
-              // Update user profile with undefined profileImage
-              const updatedUser = {
-                ...user!,
-                profileImage: undefined,
-              };
-              
-              console.log('🔄 Saving updated user to Firebase...');
-              await authService.updateUserProfile(updatedUser);
-              console.log('✅ Profile image deleted and saved to Firebase');
-              
-              // Update local state
-              setUser(updatedUser);
-              setProfileImage(null);
-              
-              // Notify parent component
-              if (onProfileUpdated) {
-                onProfileUpdated();
-              }
-              
-              Alert.alert('Success', 'Profile picture deleted successfully!');
-              
-            } catch (error) {
-              console.error('❌ Error deleting profile image:', error);
-              Alert.alert('Error', 'Failed to delete profile image');
-            }
+  const handleRemoveImage = () => {
+    // For web, use confirm instead of Alert.alert
+    if (typeof window !== 'undefined' && window.confirm) {
+      const confirmed = window.confirm('Are you sure you want to remove your profile picture?');
+      if (!confirmed) {
+        return;
+      }
+    } else {
+      // Fallback to Alert.alert for mobile
+      Alert.alert(
+        'Remove Profile Picture',
+        'Are you sure you want to remove your profile picture?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Remove', 
+            style: 'destructive', 
+            onPress: () => removeImageFromProfile()
           }
-        }
-      ]
-    );
+        ]
+      );
+      return;
+    }
+    
+    // If we reach here, user confirmed on web
+    removeImageFromProfile();
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: onLogout },
-      ]
-    );
+  const removeImageFromProfile = async () => {
+    try {
+      setLoading(true);
+      
+      // Remove from Firebase Storage (if not in development mode)
+      if (process.env.NODE_ENV !== 'development' && window.location.hostname !== 'localhost') {
+        await imageUploadService.deleteProfilePicture(user?.phoneNumber || '');
+      }
+      
+      // Update profile in Firestore to remove image
+      const profileUpdateData: Partial<UserProfile> = {
+        profilePicture: null,
+      };
+      
+      await updateUserProfile(profileUpdateData);
+      
+      // Update local state immediately
+      setProfileImage(null);
+      
+    } catch (error) {
+      console.error('❌ Failed to remove profile image:', error);
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert('Failed to remove profile image. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to remove profile image. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getErrorMessage = (field: string): string => {
+    return validationErrors[field] || '';
+  };
+
+  const hasError = (field: string): boolean => {
+    return !!validationErrors[field];
+  };
+
+  // Get initials from name for placeholder
+  const getInitials = (name: string): string => {
+    return name
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase())
+      .join('')
+      .slice(0, 2);
+  };
+
+  // Get jersey number for display
+  const getJerseyNumber = (): string | null => {
+    return formData.jerseyNumber ? formData.jerseyNumber.toString() : null;
   };
 
   if (loading) {
@@ -284,64 +403,68 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onLogout,
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <Text style={styles.backButtonText}>← Back</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>👤 Profile</Text>
-          {!editing && (
+          <Text style={styles.title}>Profile</Text>
+          {!editing ? (
             <TouchableOpacity onPress={handleEdit} style={styles.editButton}>
               <Text style={styles.editButtonText}>Edit</Text>
             </TouchableOpacity>
+          ) : (
+            <View style={styles.editButton} />
           )}
         </View>
 
-        {/* Profile Content */}
         <View style={styles.profileContent}>
           {/* Profile Picture */}
-          <View style={styles.profilePictureSection}>
-            <TouchableOpacity 
-              onPress={handleImagePicker} 
-              style={styles.profilePictureContainer}
-              disabled={!editing}
-            >
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Profile Picture</Text>
+            <View style={styles.imageContainer}>
               {profileImage ? (
-                <Image 
-                  source={{ uri: profileImage }} 
-                  style={styles.profilePicture}
-                  onError={() => {
-                    console.log('Image failed to load, falling back to placeholder');
-                    setProfileImage(null);
-                  }}
-                />
+                <View style={styles.profileImageWrapper}>
+                  <Image 
+                    source={{ uri: profileImage }} 
+                    style={styles.profileImage}
+                    onError={(error) => {
+                      setProfileImage(null); // Reset to placeholder if image fails
+                    }}
+                  />
+                  {editing && (
+                    <TouchableOpacity 
+                      style={styles.removeImageButton} 
+                      onPress={handleRemoveImage}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Text style={styles.removeImageText}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               ) : (
-                <View style={styles.profilePicturePlaceholder}>
-                  <Text style={styles.profilePictureText}>
-                    {user?.name ? user.name.charAt(0).toUpperCase() : '👤'}
-                  </Text>
-                  <Text style={styles.profilePictureLabel}>
-                    {editing ? 'Tap to add photo' : user?.name || 'No photo'}
-                  </Text>
+                <View style={styles.profileImagePlaceholder}>
+                  {getJerseyNumber() ? (
+                    <View style={styles.jerseyNumberContainer}>
+                      <Text style={styles.jerseyNumberText}>{getJerseyNumber()}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.profileImageText}>
+                      {formData.name && formData.name !== 'Loading...' ? getInitials(formData.name) : '👤'}
+                    </Text>
+                  )}
                 </View>
               )}
               {editing && (
-                <View style={styles.editOverlay}>
-                  <Text style={styles.editOverlayText}>📷</Text>
-                </View>
+                <TouchableOpacity onPress={handleImagePicker} style={styles.changeImageButton}>
+                  <Text style={styles.changeImageText}>
+                    {profileImage ? '📷 Change' : '📷 Add Photo'}
+                  </Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-            
-            {/* Delete Button - only show when editing and has image */}
-            {editing && profileImage && (
-              <TouchableOpacity 
-                onPress={handleDeleteImage}
-                style={styles.deleteImageButton}
-              >
-                <Text style={styles.deleteImageText}>🗑️ Delete</Text>
-              </TouchableOpacity>
-            )}
+            </View>
           </View>
 
           {/* Basic Info */}
@@ -349,91 +472,69 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onLogout,
             <Text style={styles.sectionTitle}>Basic Information</Text>
             
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Name *</Text>
+              <Text style={styles.label}>
+                Name <Text style={styles.required}>*</Text>
+              </Text>
               <TextInput
-                style={[styles.input, !editing && styles.inputDisabled]}
+                style={[
+                  styles.input, 
+                  !editing && styles.inputDisabled,
+                  hasError('name') && styles.inputError
+                ]}
                 value={formData.name}
-                onChangeText={(text) => {
-                  console.log('📝 Name changed:', text);
-                  setFormData({ ...formData, name: text });
-                }}
+                onChangeText={(text) => setFormData({ ...formData, name: text })}
                 editable={editing}
                 placeholder="Enter your name"
               />
+              {hasError('name') && (
+                <Text style={styles.errorText}>{getErrorMessage('name')}</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email *</Text>
+              <Text style={styles.label}>Email (Optional)</Text>
               <TextInput
-                style={[styles.input, !editing && styles.inputDisabled]}
+                style={[
+                  styles.input, 
+                  !editing && styles.inputDisabled,
+                  hasError('email') && styles.inputError
+                ]}
                 value={formData.email}
-                onChangeText={(text) => {
-                  console.log('📧 Email changed:', text);
-                  setFormData({ ...formData, email: text });
-                }}
+                onChangeText={(text) => setFormData({ ...formData, email: text })}
                 editable={editing}
-                placeholder="Enter your email"
+                placeholder="Enter your email (optional)"
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
+              {hasError('email') && (
+                <Text style={styles.errorText}>{getErrorMessage('email')}</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone</Text>
+              <Text style={styles.label}>Phone Number</Text>
               <TextInput
-                style={[styles.input, !editing && styles.inputDisabled]}
-                value={formData.phone}
-                onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                style={[
+                  styles.input, 
+                  !editing && styles.inputDisabled,
+                  hasError('phoneNumber') && styles.inputError
+                ]}
+                value={formData.phoneNumber}
+                onChangeText={(text) => setFormData({ ...formData, phoneNumber: text })}
                 editable={editing}
-                placeholder="Enter your phone number"
+                placeholder="+91xxxxxxxxxx"
+                placeholderTextColor="#999999"
                 keyboardType="phone-pad"
+                maxLength={13}
               />
+              {hasError('phoneNumber') && (
+                <Text style={styles.errorText}>{getErrorMessage('phoneNumber')}</Text>
+              )}
+              <Text style={styles.helpText}>Enter your phone number with +91 prefix</Text>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Location</Text>
-              <TextInput
-                style={[styles.input, !editing && styles.inputDisabled]}
-                value={formData.location}
-                onChangeText={(text) => setFormData({ ...formData, location: text })}
-                editable={editing}
-                placeholder="Enter your location"
-              />
-            </View>
-          </View>
-
-          {/* Cricket Info */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Cricket Information</Text>
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Preferred Role</Text>
-              <View style={styles.roleContainer}>
-                {(['batsman', 'bowler', 'all-rounder', 'wicket-keeper'] as const).map((role) => (
-                  <TouchableOpacity
-                    key={role}
-                    style={[
-                      styles.roleButton,
-                      formData.preferredRole === role && styles.roleButtonActive,
-                      !editing && styles.roleButtonDisabled,
-                    ]}
-                    onPress={() => editing && setFormData({ ...formData, preferredRole: role })}
-                    disabled={!editing}
-                  >
-                    <Text style={[
-                      styles.roleButtonText,
-                      formData.preferredRole === role && styles.roleButtonTextActive,
-                      !editing && styles.roleButtonTextDisabled,
-                    ]}>
-                      {role.charAt(0).toUpperCase() + role.slice(1).replace('-', ' ')}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Date of Birth</Text>
+              <Text style={styles.label}>Date of Birth (Optional)</Text>
               <TextInput
                 style={[styles.input, !editing && styles.inputDisabled]}
                 value={formData.dateOfBirth}
@@ -442,57 +543,154 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onLogout,
                 placeholder="YYYY-MM-DD"
               />
             </View>
+          </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Batting Style</Text>
-              <View style={styles.styleContainer}>
-                {(['right-handed', 'left-handed'] as const).map((style) => (
-                  <TouchableOpacity
-                    key={style}
-                    style={[
-                      styles.styleButton,
-                      formData.battingStyle === style && styles.styleButtonActive,
-                      !editing && styles.styleButtonDisabled,
-                    ]}
-                    onPress={() => editing && setFormData({ ...formData, battingStyle: style })}
-                    disabled={!editing}
-                  >
-                    <Text style={[
-                      styles.styleButtonText,
-                      formData.battingStyle === style && styles.styleButtonTextActive,
-                      !editing && styles.styleButtonTextDisabled,
-                    ]}>
-                      {style.charAt(0).toUpperCase() + style.slice(1).replace('-', ' ')}
-                    </Text>
-                  </TouchableOpacity>
+          {/* My Teams */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Teams</Text>
+            {userTeams.length > 0 ? (
+              <View style={styles.teamsList}>
+                {userTeams.map((team, index) => (
+                  <View key={team.teamId} style={styles.teamItem}>
+                    <View style={styles.teamInfo}>
+                      <Text style={styles.teamName}>{team.teamName}</Text>
+                      <Text style={styles.teamId}>ID: {team.teamId}</Text>
+                      <Text style={styles.teamJoined}>Joined: {new Date(team.joinedAt).toLocaleDateString()}</Text>
+                    </View>
+                    <View style={styles.teamStatus}>
+                      <Text style={styles.teamStatusText}>Active</Text>
+                    </View>
+                  </View>
                 ))}
+              </View>
+            ) : (
+              <View style={styles.noTeamsContainer}>
+                <Text style={styles.noTeamsText}>You are not in any teams yet</Text>
+                <Text style={styles.noTeamsSubtext}>Join a team to start playing!</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Cricket Information */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Cricket Information</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Playing Role (Optional)</Text>
+              {formData.playingRole && (
+                <Text style={styles.selectedValueText}>Selected: {formData.playingRole}</Text>
+              )}
+              <View style={styles.roleContainer}>
+                {['batsman', 'bowler', 'all-rounder', 'wicket-keeper'].map((role) => {
+                  const isSelected = formData.playingRole === role;
+                  return (
+                    <TouchableOpacity
+                      key={role}
+                      style={[
+                        styles.roleButton,
+                        isSelected && styles.roleButtonActive,
+                        !editing && !isSelected && styles.roleButtonDisabled
+                      ]}
+                      onPress={() => editing && setFormData({ ...formData, playingRole: role as any })}
+                      disabled={!editing}
+                    >
+                      <Text style={[
+                        styles.roleButtonText,
+                        isSelected && styles.roleButtonTextActive,
+                        !editing && !isSelected && styles.roleButtonTextDisabled
+                      ]}>
+                        {role.charAt(0).toUpperCase() + role.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Bowling Style</Text>
-              <View style={styles.styleContainer}>
-                {(['right-arm fast', 'left-arm fast', 'right-arm spin', 'left-arm spin'] as const).map((style) => (
-                  <TouchableOpacity
-                    key={style}
-                    style={[
-                      styles.styleButton,
-                      formData.bowlingStyle === style && styles.styleButtonActive,
-                      !editing && styles.styleButtonDisabled,
-                    ]}
-                    onPress={() => editing && setFormData({ ...formData, bowlingStyle: style })}
-                    disabled={!editing}
-                  >
-                    <Text style={[
-                      styles.styleButtonText,
-                      formData.bowlingStyle === style && styles.styleButtonTextActive,
-                      !editing && styles.styleButtonTextDisabled,
-                    ]}>
-                      {style.charAt(0).toUpperCase() + style.slice(1).replace('-', ' ')}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              <Text style={styles.label}>Batting Hand (Optional)</Text>
+              {formData.battingHand && (
+                <Text style={styles.selectedValueText}>Selected: {formData.battingHand}-handed</Text>
+              )}
+              <View style={styles.roleContainer}>
+                {['left', 'right'].map((hand) => {
+                  const isSelected = formData.battingHand === hand;
+                  return (
+                    <TouchableOpacity
+                      key={hand}
+                      style={[
+                        styles.roleButton,
+                        isSelected && styles.roleButtonActive,
+                        !editing && !isSelected && styles.roleButtonDisabled
+                      ]}
+                      onPress={() => editing && setFormData({ ...formData, battingHand: hand as any })}
+                      disabled={!editing}
+                    >
+                      <Text style={[
+                        styles.roleButtonText,
+                        isSelected && styles.roleButtonTextActive,
+                        !editing && !isSelected && styles.roleButtonTextDisabled
+                      ]}>
+                        {hand.charAt(0).toUpperCase() + hand.slice(1)}-handed
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Bowling Style (Optional)</Text>
+              {formData.bowlingStyle && (
+                <Text style={styles.selectedValueText}>Selected: {formData.bowlingStyle}</Text>
+              )}
+              <View style={styles.roleContainer}>
+                {['fast', 'medium', 'spin'].map((style) => {
+                  const isSelected = formData.bowlingStyle === style;
+                  return (
+                    <TouchableOpacity
+                      key={style}
+                      style={[
+                        styles.roleButton,
+                        isSelected && styles.roleButtonActive,
+                        !editing && !isSelected && styles.roleButtonDisabled
+                      ]}
+                      onPress={() => editing && setFormData({ ...formData, bowlingStyle: style as any })}
+                      disabled={!editing}
+                    >
+                      <Text style={[
+                        styles.roleButtonText,
+                        isSelected && styles.roleButtonTextActive,
+                        !editing && !isSelected && styles.roleButtonTextDisabled
+                      ]}>
+                        {style.charAt(0).toUpperCase() + style.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Jersey Number (Optional)</Text>
+              <TextInput
+                style={[
+                  styles.input, 
+                  !editing && styles.inputDisabled,
+                  hasError('jerseyNumber') && styles.inputError
+                ]}
+                value={formData.jerseyNumber ? formData.jerseyNumber.toString() : ''}
+                onChangeText={(text) => {
+                  const num = text ? parseInt(text) : null;
+                  setFormData({ ...formData, jerseyNumber: num });
+                }}
+                editable={editing}
+                placeholder="Enter jersey number (1-999)"
+                keyboardType="numeric"
+              />
+              {hasError('jerseyNumber') && (
+                <Text style={styles.errorText}>{getErrorMessage('jerseyNumber')}</Text>
+              )}
             </View>
           </View>
 
@@ -517,13 +715,6 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onLogout,
           ) : (
             <View style={styles.actionButtons}>
               <Button
-                title="🔐 Change Password"
-                onPress={() => Alert.alert('Coming Soon', 'Password reset feature will be added soon!')}
-                variant="outline"
-                size="large"
-                style={styles.secondaryButton}
-              />
-              <Button
                 title="🚪 Logout"
                 onPress={handleLogout}
                 variant="outline"
@@ -546,6 +737,16 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: SIZES.lg,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: SIZES.font,
+    color: COLORS.gray,
+    fontFamily: FONTS.regular,
   },
   header: {
     flexDirection: 'row',
@@ -570,6 +771,7 @@ const styles = StyleSheet.create({
   },
   editButton: {
     padding: SIZES.sm,
+    minWidth: 50,
   },
   editButtonText: {
     fontSize: SIZES.font,
@@ -583,7 +785,7 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.xl,
   },
   sectionTitle: {
-    fontSize: SIZES.h3,
+    fontSize: SIZES.h2, // Increased from SIZES.h3 (16) to SIZES.h2 (18)
     fontFamily: FONTS.bold,
     color: COLORS.primary,
     marginBottom: SIZES.lg,
@@ -592,17 +794,21 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.lg,
   },
   label: {
-    fontSize: SIZES.font,
+    fontSize: SIZES.h3, // Increased from SIZES.font (14) to SIZES.h3 (16)
     fontFamily: FONTS.medium,
     color: COLORS.text,
     marginBottom: SIZES.sm,
+  },
+  required: {
+    color: COLORS.error,
+    fontWeight: 'bold',
   },
   input: {
     borderWidth: 1,
     borderColor: COLORS.lightGray,
     borderRadius: SIZES.radius,
     padding: SIZES.md,
-    fontSize: SIZES.font,
+    fontSize: SIZES.h3, // Increased from SIZES.font (14) to SIZES.h3 (16)
     fontFamily: FONTS.regular,
     color: COLORS.text,
     backgroundColor: COLORS.white,
@@ -610,6 +816,89 @@ const styles = StyleSheet.create({
   inputDisabled: {
     backgroundColor: COLORS.lightGray,
     color: COLORS.gray,
+  },
+  inputError: {
+    borderColor: COLORS.error,
+    backgroundColor: '#FFF5F5',
+  },
+  errorText: {
+    color: COLORS.error,
+    fontSize: SIZES.font, // Increased from SIZES.sm (8) to SIZES.font (14)
+    fontFamily: FONTS.regular,
+    marginTop: SIZES.xs,
+  },
+  helpText: {
+    color: COLORS.gray,
+    fontSize: SIZES.font, // Increased from SIZES.sm (8) to SIZES.font (14)
+    fontFamily: FONTS.regular,
+    marginTop: SIZES.xs,
+  },
+  // Teams section styles
+  teamsList: {
+    marginTop: 8,
+  },
+  teamItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  teamInfo: {
+    flex: 1,
+  },
+  teamName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  teamId: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
+  },
+  teamJoined: {
+    fontSize: 12,
+    color: '#666',
+  },
+  teamStatus: {
+    backgroundColor: '#28a745',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  teamStatusText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  noTeamsContainer: {
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  noTeamsText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 4,
+  },
+  noTeamsSubtext: {
+    fontSize: 14,
+    color: '#999',
+  },
+  selectedValueText: {
+    color: COLORS.primary,
+    fontSize: SIZES.font,
+    fontFamily: FONTS.medium,
+    marginBottom: SIZES.xs,
+    fontStyle: 'italic',
   },
   roleContainer: {
     flexDirection: 'row',
@@ -630,9 +919,10 @@ const styles = StyleSheet.create({
   },
   roleButtonDisabled: {
     backgroundColor: COLORS.lightGray,
+    borderColor: COLORS.lightGray,
   },
   roleButtonText: {
-    fontSize: SIZES.small,
+    fontSize: SIZES.font, // Increased from SIZES.sm (8) to SIZES.font (14)
     fontFamily: FONTS.medium,
     color: COLORS.text,
   },
@@ -642,124 +932,100 @@ const styles = StyleSheet.create({
   roleButtonTextDisabled: {
     color: COLORS.gray,
   },
-  styleContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SIZES.sm,
+  imageContainer: {
+    alignItems: 'center',
+    marginBottom: SIZES.lg,
   },
-  styleButton: {
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: SIZES.sm,
+  },
+  profileImagePlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SIZES.sm,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  profileImageText: {
+    fontSize: SIZES.h2,
+    color: COLORS.white,
+    fontFamily: FONTS.bold,
+  },
+  profileImageWrapper: {
+    position: 'relative',
+    marginBottom: SIZES.sm,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white,
+    zIndex: 10,
+    // Web-specific styles
+    cursor: 'pointer',
+    userSelect: 'none',
+    // Ensure it's clickable on web
+    minWidth: 28,
+    minHeight: 28,
+  },
+  removeImageText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontFamily: FONTS.bold,
+  },
+  jerseyNumberContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  jerseyNumberText: {
+    fontSize: 32,
+    color: COLORS.white,
+    fontFamily: FONTS.bold,
+  },
+  changeImageButton: {
+    backgroundColor: COLORS.primary,
     paddingHorizontal: SIZES.md,
     paddingVertical: SIZES.sm,
     borderRadius: SIZES.radius,
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
-    backgroundColor: COLORS.white,
   },
-  styleButtonActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  styleButtonDisabled: {
-    backgroundColor: COLORS.lightGray,
-  },
-  styleButtonText: {
-    fontSize: SIZES.small,
-    fontFamily: FONTS.medium,
-    color: COLORS.text,
-  },
-  styleButtonTextActive: {
+  changeImageText: {
     color: COLORS.white,
-  },
-  styleButtonTextDisabled: {
-    color: COLORS.gray,
+    fontSize: SIZES.font, // Increased from SIZES.sm (8) to SIZES.font (14)
+    fontFamily: FONTS.medium,
   },
   actionButtons: {
+    flexDirection: 'row',
     gap: SIZES.md,
     marginTop: SIZES.xl,
   },
   cancelButton: {
-    borderColor: COLORS.gray,
+    flex: 1,
   },
   saveButton: {
-    backgroundColor: COLORS.primary,
-  },
-  secondaryButton: {
-    borderColor: COLORS.primary,
+    flex: 1,
   },
   logoutButton: {
-    borderColor: COLORS.error || '#ff4444',
-  },
-  loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: SIZES.font,
-    fontFamily: FONTS.medium,
-    color: COLORS.text,
-  },
-  profilePictureSection: {
-    alignItems: 'center',
-    marginBottom: SIZES.xl,
-  },
-  profilePictureContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: COLORS.lightGray,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-    borderWidth: 3,
-    borderColor: COLORS.primary,
-  },
-  profilePicture: {
-    width: 114,
-    height: 114,
-    borderRadius: 57,
-  },
-  profilePicturePlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profilePictureText: {
-    fontSize: 32,
-    marginBottom: SIZES.sm,
-  },
-  profilePictureLabel: {
-    fontSize: SIZES.small,
-    fontFamily: FONTS.medium,
-    color: COLORS.gray,
-    textAlign: 'center',
-  },
-  editOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editOverlayText: {
-    fontSize: 24,
-    color: COLORS.white,
-  },
-  deleteImageButton: {
-    backgroundColor: COLORS.error,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    marginTop: 8,
-    alignSelf: 'center',
-  },
-  deleteImageText: {
-    color: COLORS.white,
-    fontSize: 12,
-    fontFamily: FONTS.medium,
   },
 });
 

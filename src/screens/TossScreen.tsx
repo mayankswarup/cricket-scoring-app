@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   Dimensions,
   Pressable,
   Image,
+  ScrollView,
 } from 'react-native';
+import { Audio } from 'expo-av';
 import { COLORS, SIZES, FONTS } from '../constants';
 // import { UI_CONFIG } from '../config/appConfig';
 
@@ -17,18 +19,20 @@ const { width } = Dimensions.get('window');
 
 interface TossScreenProps {
   onBack: () => void;
-  teamA: string;
-  teamB: string;
-  onTossComplete: (winner: string, decision: string) => void;
+  teamA?: string;
+  teamB?: string;
+  onTossComplete?: (winner: string, decision: string) => void;
+  isQuickToss?: boolean; // New prop to indicate if this is just a quick toss
 }
 
-const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA, teamB, onTossComplete }) => {
+const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA = 'Team A', teamB = 'Team B', onTossComplete, isQuickToss = false }) => {
   const progress = useRef(new Animated.Value(0)).current; // 0..1 (0/1=H, 0.5=T)
   const [busy, setBusy] = useState(false);
   const [tossResult, setTossResult] = useState<string | null>(null);
   const [showDecision, setShowDecision] = useState(false);
   const [tossWinner, setTossWinner] = useState<string | null>(null);
   const [showBattingDecision, setShowBattingDecision] = useState(false);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
 
   // Faces rotate in lockstep but 180° apart
   const frontRotY = progress.interpolate({
@@ -48,9 +52,47 @@ const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA, teamB, onTossCom
     outputRange: [0.05, 1, 0.05, 1, 0.05],  // widest when "on edge"
   });
 
+  // Load sound effect on component mount
+  useEffect(() => {
+    loadSound();
+    return () => {
+      // Cleanup sound on unmount
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, []);
+
+  const loadSound = async () => {
+    try {
+      console.log('🔊 Loading coin toss sound...');
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('../../assets/img/coin_toss_soft.wav')
+      );
+      setSound(newSound);
+      console.log('✅ Coin toss sound loaded successfully');
+    } catch (error) {
+      console.error('❌ Failed to load coin toss sound:', error);
+    }
+  };
+
+  const playCoinSound = async () => {
+    try {
+      if (sound) {
+        console.log('🔊 Playing coin toss sound...');
+        await sound.replayAsync();
+      }
+    } catch (error) {
+      console.error('❌ Failed to play coin toss sound:', error);
+    }
+  };
+
   const flipCoin = () => {
     if (busy) return;
     setBusy(true);
+
+    // Play coin toss sound immediately when flip starts
+    playCoinSound();
 
     const headsWins = Math.random() < 0.5;
     const target = headsWins ? 2 : 2.5; // 2 spins or 2.5 spins (tails)
@@ -71,11 +113,20 @@ const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA, teamB, onTossCom
   const handleTossWinner = (winner: string) => {
     setTossWinner(winner);
     setShowDecision(false);
-    setShowBattingDecision(true);
+    
+    if (isQuickToss) {
+      // For quick toss, just show the result and allow going back
+      console.log('🪙 Quick toss completed:', winner);
+      // Don't proceed to batting decision for quick toss
+    } else {
+      setShowBattingDecision(true);
+    }
   };
 
   const handleBattingDecision = (decision: string) => {
-    onTossComplete(tossWinner!, decision);
+    if (onTossComplete) {
+      onTossComplete(tossWinner!, decision);
+    }
   };
 
 
@@ -90,9 +141,11 @@ const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA, teamB, onTossCom
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Main Content */}
-      <View style={styles.content}>
-        <Text style={styles.subtitle}>Flip the coin to decide!</Text>
+      {/* Main Content - Scrollable */}
+      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.content}>
+        <Text style={styles.subtitle}>
+          {isQuickToss ? 'Flip the coin for a quick decision!' : 'Flip the coin to decide!'}
+        </Text>
         
         {/* Coin Container */}
         <View style={styles.coinContainer}>
@@ -159,7 +212,7 @@ const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA, teamB, onTossCom
           </View>
         )}
         
-        {showDecision && (
+        {showDecision && !isQuickToss && (
           <View style={styles.decisionContainer}>
             <Text style={styles.decisionTitle}>
               {tossResult === 'Heads' ? 'Heads wins!' : 'Tails wins!'}
@@ -212,7 +265,7 @@ const TossScreen: React.FC<TossScreenProps> = ({ onBack, teamA, teamB, onTossCom
             </View>
           </View>
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 };
@@ -248,11 +301,15 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 60,
   },
-  content: {
+  scrollContent: {
     flex: 1,
+  },
+  content: {
     alignItems: 'center',
     paddingHorizontal: SIZES.lg,
     paddingTop: SIZES.xxl,
+    paddingBottom: SIZES.xxl, // Add bottom padding for better scrolling
+    flexGrow: 1,
   },
   subtitle: {
     fontSize: 18,
