@@ -6,6 +6,8 @@ import { userProfileService, UserProfile } from '../services/userProfileService'
 interface User {
   phoneNumber: string;
   isAdmin: boolean;
+  isPro: boolean;
+  isSuperAdmin: boolean;
   name?: string;
   profile?: UserProfile;
 }
@@ -55,9 +57,23 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
           // Update last login time
           await userProfileService.updateLastLogin(phoneNumber);
           
+          // Check if this is the app owner (Super Admin)
+          const isAppOwner = phoneNumber === '+919019078195';
+          
+          // Check Pro status
+          let isPro = userProfile?.isPro || false;
+          
+          // App owner is Super Admin with all permissions
+          if (isAppOwner) {
+            isPro = true;
+            console.log('👑 Super Admin detected - Full access granted');
+          }
+          
           const newUser: User = {
             phoneNumber,
             isAdmin: false, // Will be determined by team membership
+            isPro: isPro,
+            isSuperAdmin: isAppOwner, // Only app owner is Super Admin
             name: userProfile?.name || `User ${phoneNumber}`,
             profile: userProfile || undefined,
           };
@@ -70,9 +86,12 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
           console.error('❌ Failed to load user profile:', error);
           
           // Fallback: create basic user without profile
+          const isAppOwner = phoneNumber === '+919019078195';
           const newUser: User = {
             phoneNumber,
             isAdmin: false,
+            isPro: isAppOwner, // App owner is always Pro
+            isSuperAdmin: isAppOwner, // App owner is Super Admin
             name: `User ${phoneNumber}`,
           };
           
@@ -96,7 +115,10 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       
       if (firebaseUser && firebaseUser.phoneNumber) {
         // User is logged in via Firebase
-        const phoneNumber = firebaseUser.phoneNumber.replace('+91', '');
+        console.log('🔍 Firebase user phone number:', firebaseUser.phoneNumber);
+        // Keep the full phone number with +91 for Firebase compatibility
+        const phoneNumber = firebaseUser.phoneNumber;
+        console.log('🔍 Using full phone number for Firebase:', phoneNumber);
         
         try {
           // Load user profile from Firebase
@@ -105,12 +127,29 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
           // Update last login time
           await userProfileService.updateLastLogin(phoneNumber);
           
+          // Check if this is the app owner (Super Admin)
+          const isAppOwner = phoneNumber === '+919019078195';
+          
+          // Check Pro status
+          let isPro = userProfile?.isPro || false;
+          
+          // App owner is Super Admin with all permissions
+          if (isAppOwner) {
+            isPro = true;
+            console.log('👑 Super Admin detected - Full access granted');
+          }
+          
           const newUser: User = {
             phoneNumber,
             isAdmin: false, // Will be determined by team membership
+            isPro: isPro,
+            isSuperAdmin: isAppOwner, // Only app owner is Super Admin
             name: userProfile?.name || `User ${phoneNumber}`,
             profile: userProfile || undefined,
           };
+          
+          console.log('🔍 UserContext: Stored phone number:', phoneNumber);
+          console.log('🔍 UserContext: Firebase user phone number:', firebaseUser.phoneNumber);
           
           await AsyncStorage.setItem('currentUser', JSON.stringify(newUser));
           setUser(newUser);
@@ -120,9 +159,12 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
           console.error('❌ Failed to load user profile on app start:', error);
           
           // Fallback: create basic user without profile
+          const isAppOwner = phoneNumber === '+919019078195';
           const newUser: User = {
             phoneNumber,
             isAdmin: false,
+            isPro: isAppOwner, // App owner is always Pro
+            isSuperAdmin: isAppOwner, // App owner is Super Admin
             name: `User ${phoneNumber}`,
           };
           
@@ -141,14 +183,35 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
 
   const login = async (phoneNumber: string, name?: string) => {
     try {
+      // Check if this is the app owner (Super Admin)
+      const isAppOwner = phoneNumber === '+919019078195';
+      
+      // Check Pro status from Firebase
+      let isPro = false;
+      try {
+        isPro = await userProfileService.isUserPro(phoneNumber);
+      } catch (error) {
+        console.log('Could not check Pro status, defaulting to false');
+      }
+      
+      // App owner is Super Admin with all permissions
+      if (isAppOwner) {
+        isPro = true;
+        console.log('👑 Super Admin detected - Full access granted');
+      }
+      
       const newUser: User = {
         phoneNumber,
         isAdmin: false, // Will be determined by team membership
+        isPro: isPro,
+        isSuperAdmin: isAppOwner, // Only app owner is Super Admin
         name: name || `User ${phoneNumber}`,
       };
       
       await AsyncStorage.setItem('currentUser', JSON.stringify(newUser));
       setUser(newUser);
+      
+      console.log(`✅ User logged in: ${name || phoneNumber} (Pro: ${isPro}, SuperAdmin: ${isAppOwner})`);
     } catch (error) {
       console.error('Error saving user:', error);
       throw error;
@@ -172,10 +235,17 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     }
     
     try {
-      await userProfileService.updateUserProfile(user.phoneNumber, profileData);
+      console.log('🔄 UserContext: Updating profile for phone:', user.phoneNumber);
+      console.log('🔄 UserContext: Profile data to update:', profileData);
+      
+      // Use the full phone number as stored in Firebase
+      const phoneNumberForUpdate = user.phoneNumber;
+      console.log('🔄 UserContext: Using phone number for update:', phoneNumberForUpdate);
+      
+      await userProfileService.updateUserProfile(phoneNumberForUpdate, profileData);
       
       // Reload user profile
-      const updatedProfile = await userProfileService.getUserProfile(user.phoneNumber);
+      const updatedProfile = await userProfileService.getUserProfile(phoneNumberForUpdate);
       
       if (updatedProfile) {
         const updatedUser: User = {

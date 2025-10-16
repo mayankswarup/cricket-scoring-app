@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -29,6 +29,7 @@ interface SideDrawerProps {
     phoneNumber: string;
     name?: string;
     profile?: UserProfile;
+    isSuperAdmin?: boolean;
   } | null;
   onProfilePress: () => void;
   onLogout: () => void;
@@ -36,6 +37,13 @@ interface SideDrawerProps {
   onStartMatchPress?: () => void;
   onNotificationTestPress?: () => void;
   onEnhancedFeaturesPress?: () => void;
+  onFindPlayersPress?: () => void;
+  onCreateTeamPress?: () => void;
+  onMyTeamsPress?: () => void;
+  onTermsOfServicePress?: () => void;
+  onRateUsPress?: () => void;
+  onSuperAdminPress?: () => void;
+  onPrivacyPolicyPress?: () => void;
 }
 
 const SideDrawer: React.FC<SideDrawerProps> = ({
@@ -48,16 +56,25 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
   onStartMatchPress,
   onNotificationTestPress,
   onEnhancedFeaturesPress,
+  onFindPlayersPress,
+  onCreateTeamPress,
+  onMyTeamsPress,
+  onTermsOfServicePress,
+  onRateUsPress,
+  onSuperAdminPress,
+  onPrivacyPolicyPress,
 }) => {
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
   const menuItems: MenuItem[] = [
-    {
-      id: 'pro',
-      label: 'PRO starting at ₹199',
-      icon: '📊',
-      onPress: () => console.log('PRO pressed'),
-      badge: 'PRO',
-      badgeColor: COLORS.success,
-    },
+    // {
+    //   id: 'pro',
+    //   label: 'PRO starting at ₹199',
+    //   icon: '📊',
+    //   onPress: () => console.log('PRO pressed'),
+    //   badge: 'PRO',
+    //   badgeColor: COLORS.success,
+    // },
     {
       id: 'tournament',
       label: 'Add a Tournament/Series',
@@ -78,12 +95,12 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
       badge: 'FREE',
       badgeColor: COLORS.warning,
     },
-    {
-      id: 'live',
-      label: 'Go Live',
-      icon: '▶️',
-      onPress: () => console.log('Go Live pressed'),
-    },
+    // {
+    //   id: 'live',
+    //   label: 'Go Live',
+    //   icon: '▶️',
+    //   onPress: () => console.log('Go Live pressed'),
+    // },
     {
       id: 'toss',
       label: 'Quick Toss',
@@ -108,65 +125,93 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
     //   badge: 'TEST',
     //   badgeColor: COLORS.primary,
     // },
+    // {
+    //   id: 'enhanced',
+    //   label: 'Enhanced Features Demo',
+    //   icon: '✨',
+    //   onPress: () => {
+    //     onClose();
+    //     onEnhancedFeaturesPress?.();
+    //   },
+    //   badge: 'NEW',
+    //   badgeColor: COLORS.success,
+    // },
     {
-      id: 'enhanced',
-      label: 'Enhanced Features Demo',
-      icon: '✨',
+      id: 'findPlayers',
+      label: 'Find Players',
+      icon: '🔍',
       onPress: () => {
         onClose();
-        onEnhancedFeaturesPress?.();
+        onFindPlayersPress?.();
       },
-      badge: 'NEW',
-      badgeColor: COLORS.success,
+      badge: 'FREE',
     },
     {
-      id: 'mycricket',
-      label: 'My Cricket',
+      id: 'createTeam',
+      label: 'Create Team',
       icon: '🏏',
-      onPress: () => console.log('My Cricket pressed'),
+      onPress: () => {
+        onClose();
+        onCreateTeamPress?.();
+      },
     },
     {
-      id: 'performance',
-      label: 'My Performance',
-      icon: '📊',
-      onPress: () => console.log('Performance pressed'),
+      id: 'myTeams',
+      label: 'My Teams',
+      icon: '👥',
+      onPress: () => {
+        onClose();
+        onMyTeamsPress?.();
+      },
     },
-    {
-      id: 'store',
-      label: 'CricHeroes Store',
-      icon: '🛍️',
-      onPress: () => console.log('Store pressed'),
-    },
-    {
-      id: 'playerleaderboard',
-      label: 'Player Leaderboard',
-      icon: '🏆',
-      onPress: () => console.log('Player Leaderboard pressed'),
-    },
-    {
-      id: 'teamleaderboard',
-      label: 'Team Leaderboard',
-      icon: '🏆',
-      onPress: () => console.log('Team Leaderboard pressed'),
-    },
-    {
-      id: 'awards',
-      label: 'CricHeroes Awards',
-      icon: '🏅',
-      onPress: () => console.log('Awards pressed'),
-    },
-    {
-      id: 'bookground',
-      label: 'BookMyGround',
-      icon: '#️⃣',
-      onPress: () => console.log('BookMyGround pressed'),
-    },
-    {
-      id: 'challenges',
-      label: 'Challenges',
-      icon: '🔄',
-      onPress: () => console.log('Challenges pressed'),
-    },
+    // {
+    //   id: 'mycricket',
+    //   label: 'My Cricket',
+    //   icon: '🏏',
+    //   onPress: () => console.log('My Cricket pressed'),
+    // },
+    // {
+    //   id: 'performance',
+    //   label: 'My Performance',
+    //   icon: '📊',
+    //   onPress: () => console.log('Performance pressed'),
+    // },
+    // {
+    //   id: 'store',
+    //   label: 'CricHeroes Store',
+    //   icon: '🛍️',
+    //   onPress: () => console.log('Store pressed'),
+    // },
+    // {
+    //   id: 'playerleaderboard',
+    //   label: 'Player Leaderboard',
+    //   icon: '🏆',
+    //   onPress: () => console.log('Player Leaderboard pressed'),
+    // },
+    // {
+    //   id: 'teamleaderboard',
+    //   label: 'Team Leaderboard',
+    //   icon: '🏆',
+    //   onPress: () => console.log('Team Leaderboard pressed'),
+    // },
+    // {
+    //   id: 'awards',
+    //   label: 'CricHeroes Awards',
+    //   icon: '🏅',
+    //   onPress: () => console.log('Awards pressed'),
+    // },
+    // {
+    //   id: 'bookground',
+    //   label: 'BookMyGround',
+    //   icon: '#️⃣',
+    //   onPress: () => console.log('BookMyGround pressed'),
+    // },
+    // {
+    //   id: 'challenges',
+    //   label: 'Challenges',
+    //   icon: '🔄',
+    //   onPress: () => console.log('Challenges pressed'),
+    // },
     {
       id: 'looking',
       label: 'Looking For',
@@ -181,12 +226,6 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
       label: 'Share the app',
       icon: '↗️',
       onPress: () => console.log('Share app pressed'),
-    },
-    {
-      id: 'rate',
-      label: 'Rate us',
-      icon: '⭐',
-      onPress: () => console.log('Rate us pressed'),
     },
     {
       id: 'appcode',
@@ -243,16 +282,25 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
       onPress: () => console.log('Help/FAQs pressed'),
     },
     {
-      id: 'privacy',
-      label: 'Privacy Policy',
-      icon: '🔍',
-      onPress: () => console.log('Privacy Policy pressed'),
-    },
-    {
       id: 'terms',
       label: 'Terms of Service',
       icon: '📝',
-      onPress: () => console.log('Terms of Service pressed'),
+      onPress: onTermsOfServicePress || (() => console.log('Terms of Service pressed')),
+    },
+    {
+      id: 'privacy',
+      label: 'Privacy Policy',
+      icon: '🔒',
+      onPress: onPrivacyPolicyPress || (() => console.log('Privacy Policy pressed')),
+    },
+    {
+      id: 'rate',
+      label: 'Rate us',
+      icon: '⭐',
+      onPress: onRateUsPress || (() => {
+        console.log('Rate us pressed - fallback');
+        alert('Rate us pressed - navigation not connected');
+      }),
     },
   ];
 
@@ -285,7 +333,6 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
           <View style={styles.header}>
             <View style={styles.headerTop}>
               <View style={styles.headerSpacer} />
-              <Text style={styles.headerTitle}>Menu</Text>
               <View style={styles.headerSpacer} />
             </View>
             
@@ -325,7 +372,7 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
           </View>
 
           {/* Menu items */}
-          <ScrollView style={styles.menuContainer}>
+          <ScrollView ref={scrollViewRef} style={styles.menuContainer}>
             {/* Main Cricket Features */}
             {menuItems.map((item) => (
               <TouchableOpacity
@@ -348,11 +395,36 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
               </TouchableOpacity>
             ))}
 
+            {/* Super Admin Section - Only for Super Admin */}
+            {user?.isSuperAdmin && (
+              <>
+                <TouchableOpacity
+                  style={[styles.menuItem, styles.superAdminItem]}
+                  onPress={() => {
+                    console.log('👑 Super Admin pressed');
+                    onClose();
+                    onSuperAdminPress?.();
+                  }}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Text style={styles.menuIcon}>👑</Text>
+                    <Text style={[styles.menuLabel, styles.superAdminLabel]}>Super Admin</Text>
+                  </View>
+                  <View style={[styles.badge, { backgroundColor: '#FF6B35' }]}>
+                    <Text style={styles.badgeText}>ADMIN</Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {/* Divider */}
+                <View style={styles.divider} />
+              </>
+            )}
+
             {/* Divider */}
             <View style={styles.divider} />
 
             {/* App & Social Features */}
-            {additionalMenuItems.slice(0, 4).map((item) => (
+            {additionalMenuItems.slice(0, 3).map((item) => (
               <TouchableOpacity
                 key={item.id}
                 style={styles.menuItem}
@@ -365,39 +437,59 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
               </TouchableOpacity>
             ))}
 
-            {/* Social Media Section */}
-            <View style={styles.sectionHeader}>
+            {/* More Section - Collapsible */}
+            <TouchableOpacity
+              style={styles.sectionHeader}
+              onPress={() => {
+                setShowMoreMenu(!showMoreMenu);
+                // Auto-scroll to show the expanded menu
+                if (!showMoreMenu) {
+                  setTimeout(() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                  }, 100);
+                }
+              }}
+            >
               <Text style={styles.sectionTitle}>More</Text>
-            </View>
-            {additionalMenuItems.slice(4, 8).map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.menuItem}
-                onPress={item.onPress}
-              >
-                <View style={styles.menuItemLeft}>
-                  <Text style={styles.menuIcon}>{item.icon}</Text>
-                  <Text style={styles.menuLabel}>{item.label}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+              <Text style={styles.dropdownArrow}>
+                {showMoreMenu ? '▲' : '▼'}
+              </Text>
+            </TouchableOpacity>
+            
+            {showMoreMenu && (
+              <>
+                {/* Social Media Section */}
+                {additionalMenuItems.slice(3, 8).map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.menuItem}
+                    onPress={item.onPress}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <Text style={styles.menuIcon}>{item.icon}</Text>
+                      <Text style={styles.menuLabel}>{item.label}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
 
-            {/* Divider */}
-            <View style={styles.divider} />
+                {/* Divider */}
+                <View style={styles.divider} />
 
-            {/* Support & Legal */}
-            {additionalMenuItems.slice(8).map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.menuItem}
-                onPress={item.onPress}
-              >
-                <View style={styles.menuItemLeft}>
-                  <Text style={styles.menuIcon}>{item.icon}</Text>
-                  <Text style={styles.menuLabel}>{item.label}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+                {/* Support & Legal */}
+                {additionalMenuItems.slice(8).map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.menuItem}
+                    onPress={item.onPress}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <Text style={styles.menuIcon}>{item.icon}</Text>
+                      <Text style={styles.menuLabel}>{item.label}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
           </ScrollView>
 
           {/* Footer */}
@@ -411,6 +503,13 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
             >
               <Text style={styles.logoutText}>🚪 Logout</Text>
             </TouchableOpacity>
+            
+            {/* Company Information */}
+            <View style={styles.companyInfo}>
+              <Text style={styles.companyName}>Tuktuk Sports Private Ltd</Text>
+              <Text style={styles.companyAddress}>Bengaluru, Karnataka 560035</Text>
+              <Text style={styles.copyright}>© 2025</Text>
+            </View>
             
             {/* Close Icon Button */}
             <TouchableOpacity 
@@ -583,6 +682,33 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.lightGray,
   },
+  companyInfo: {
+    alignItems: 'center',
+    marginTop: SIZES.md,
+    paddingTop: SIZES.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.lightGray,
+  },
+  companyName: {
+    fontSize: 14,
+    fontFamily: FONTS.medium,
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: SIZES.xs,
+  },
+  companyAddress: {
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  copyright: {
+    fontSize: 11,
+    fontFamily: FONTS.regular,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: SIZES.xs,
+  },
   logoutButton: {
     paddingVertical: SIZES.sm,
   },
@@ -597,6 +723,9 @@ const styles = StyleSheet.create({
     marginVertical: SIZES.sm,
   },
   sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: SIZES.lg,
     paddingVertical: SIZES.sm,
     backgroundColor: COLORS.surface,
@@ -606,6 +735,20 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.medium,
     color: COLORS.textSecondary,
     textTransform: 'uppercase',
+  },
+  dropdownArrow: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.textSecondary,
+  },
+  superAdminItem: {
+    backgroundColor: '#FFF3E0',
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B35',
+  },
+  superAdminLabel: {
+    color: '#FF6B35',
+    fontWeight: 'bold',
   },
 });
 

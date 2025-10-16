@@ -6,6 +6,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import PhoneLoginScreen from './src/screens/PhoneLoginScreen';
 import { phoneAuthService } from './src/services/phoneAuthService';
 import { COLORS } from './src/constants';
+import './src/utils/initializeAppOwner'; // Auto-initialize app owner as Pro
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);

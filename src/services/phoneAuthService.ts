@@ -41,6 +41,7 @@ class PhoneAuthService {
           container.style.position = 'absolute';
           container.style.top = '-9999px';
           document.body.appendChild(container);
+          console.log('✅ Created reCAPTCHA container:', containerId);
         }
       }
 
@@ -82,6 +83,8 @@ class PhoneAuthService {
       // Format phone number with country code (+91 for India)
       const formattedPhone = `+91${phoneNumber}`;
       console.log('📱 Sending OTP to:', formattedPhone);
+
+      // Firebase phone authentication is now properly configured
 
       // Initialize reCAPTCHA if not already done
       if (!this.recaptchaVerifier) {

@@ -159,7 +159,8 @@ const PhoneLoginScreen: React.FC<PhoneLoginScreenProps> = ({ onLoginSuccess }) =
               <Text style={styles.countryCode}>+91</Text>
               <TextInput
                 style={styles.phoneInput}
-                placeholder="9019078195"
+                placeholder="xxxxxxxxxx"
+                placeholderTextColor="#999999"
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
                 keyboardType="phone-pad"

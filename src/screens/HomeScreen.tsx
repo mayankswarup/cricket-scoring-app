@@ -41,7 +41,13 @@ import MatchDetailsModal from '../components/MatchDetailsModal';
 import TeamSelectionScreen from './TeamSelectionScreen';
 import NotificationTestScreen from './NotificationTestScreen';
 import EnhancedFeaturesDemoScreen from './EnhancedFeaturesDemoScreen';
-// import PlayerSearchScreen from './PlayerSearchScreen';
+import PlayerSearchScreen from './PlayerSearchScreen';
+import TeamCreationScreen from './TeamCreationScreen';
+import MyTeamsScreen from './MyTeamsScreen';
+import TermsOfServiceScreen from './TermsOfServiceScreen';
+import RateUsScreen from './RateUsScreen';
+import SuperAdminScreen from './SuperAdminScreen';
+import PrivacyPolicyScreen from './PrivacyPolicyScreen';
 // import TeamCreationScreen from './TeamCreationScreen';
 // import { apiService } from '../services/api';
 import { authService } from '../services/authService';
@@ -183,6 +189,31 @@ const HomeScreen: React.FC = () => {
   
   // Enhanced Features Demo
   const [showEnhancedDemo, setShowEnhancedDemo] = useState(false);
+  
+  // Player Search
+  const [showPlayerSearch, setShowPlayerSearch] = useState(false);
+  const [selectedTeamForPlayerSearch, setSelectedTeamForPlayerSearch] = useState<{id: string, name: string} | null>(null);
+  const [showTeamCreation, setShowTeamCreation] = useState(false);
+  const [showMyTeams, setShowMyTeams] = useState(false);
+  const [showTermsOfService, setShowTermsOfService] = useState(false);
+  const [showRateUs, setShowRateUs] = useState(false);
+  const [showSuperAdmin, setShowSuperAdmin] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+
+  // Helper functions for navigation stack
+  const pushToStack = (screen: string) => {
+    setNavigationStack(prev => [...prev, screen]);
+  };
+
+  const popFromStack = () => {
+    const prevScreen = navigationStack[navigationStack.length - 1];
+    setNavigationStack(prev => prev.slice(0, -1));
+    return prevScreen;
+  };
+
+  const getPreviousScreen = () => {
+    return navigationStack[navigationStack.length - 1];
+  };
 
   useEffect(() => {
     // loadAsiaCupMatches();
@@ -298,6 +329,7 @@ const HomeScreen: React.FC = () => {
   // handleLogout removed - using handleUserLogout with Firebase logout instead
 
   const handleUserProfile = () => {
+    pushToStack('home');
     setShowUserProfile(true);
   };
 
@@ -305,6 +337,22 @@ const HomeScreen: React.FC = () => {
     setShowUserProfile(false);
     // Auto-refresh user data when returning from profile
     console.log('🔄 Returning from profile, auto-refreshing data...');
+    
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      // Stay on home screen (default behavior)
+      console.log('🏠 Returning to home screen');
+    } else {
+      // Default fallback to side drawer
+      setShowSideDrawer(true);
+    }
+    
     await checkAuthentication();
   };
 
@@ -354,6 +402,7 @@ const HomeScreen: React.FC = () => {
   };
 
   const handleSideDrawerProfilePress = () => {
+    pushToStack('sideDrawer');
     setShowSideDrawer(false);
     setShowUserProfile(true);
   };
@@ -443,6 +492,161 @@ const HomeScreen: React.FC = () => {
 
   const handleEnhancedDemoBack = () => {
     setShowEnhancedDemo(false);
+  };
+
+  // Player Search handlers
+  const handlePlayerSearch = (teamId: string, teamName: string) => {
+    console.log('🔍 Opening player search for team:', teamName);
+    setSelectedTeamForPlayerSearch({ id: teamId, name: teamName });
+    setShowPlayerSearch(true);
+  };
+
+  const handlePlayerSearchBack = () => {
+    setShowPlayerSearch(false);
+    setSelectedTeamForPlayerSearch(null);
+  };
+
+  const handlePlayerAdded = async (player: any) => {
+    try {
+      console.log('✅ Player added to team:', player.name);
+      
+      // TODO: Implement actual team management
+      // For now, just log the addition
+      // In a real app, you would:
+      // 1. Add player to team in Firebase
+      // 2. Update team state
+      // 3. Refresh team data
+      
+      console.log(`📝 Player ${player.name} should be added to team ${selectedTeamForPlayerSearch?.name}`);
+    } catch (error) {
+      console.error('❌ Failed to add player to team:', error);
+    }
+  };
+
+  const handleCreateTeam = () => {
+    setShowTeamCreation(true);
+  };
+
+  const handleTeamCreated = (teamId: string) => {
+    setShowTeamCreation(false);
+    // Navigate to My Teams to show the newly created team
+    setShowMyTeams(true);
+  };
+
+  const handleMyTeams = () => {
+    setShowMyTeams(true);
+  };
+
+  const handleTeamCreationBack = () => {
+    setShowTeamCreation(false);
+  };
+
+  const handleMyTeamsBack = () => {
+    setShowMyTeams(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      // Stay on home screen (default behavior)
+      console.log('🏠 Returning to home screen');
+    } else {
+      // Default fallback to side drawer
+      setShowSideDrawer(true);
+    }
+  };
+
+  const handleTermsOfServiceBack = () => {
+    setShowTermsOfService(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      console.log('🏠 Returning to home screen');
+    }
+  };
+
+  const handleTermsOfServicePress = () => {
+    pushToStack('sideDrawer');
+    setShowTermsOfService(true);
+    setShowSideDrawer(false);
+  };
+
+  const handleRateUsBack = () => {
+    setShowRateUs(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      console.log('🏠 Returning to home screen');
+    }
+  };
+
+  const handleRateUsPress = () => {
+    console.log('🎯 Rate Us pressed - opening screen');
+    pushToStack('sideDrawer');
+    setShowRateUs(true);
+    setShowSideDrawer(false);
+  };
+
+  const handleSuperAdminPress = () => {
+    console.log('👑 Super Admin pressed - opening screen');
+    pushToStack('sideDrawer');
+    setShowSuperAdmin(true);
+    setShowSideDrawer(false);
+  };
+
+  const handleSuperAdminBack = () => {
+    setShowSuperAdmin(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      console.log('🏠 Returning to home screen');
+    }
+  };
+
+  const handlePrivacyPolicyPress = () => {
+    console.log('🔒 Privacy Policy pressed - opening screen');
+    pushToStack('sideDrawer');
+    setShowPrivacyPolicy(true);
+    setShowSideDrawer(false);
+  };
+
+  const handlePrivacyPolicyBack = () => {
+    setShowPrivacyPolicy(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      console.log('🏠 Returning to home screen');
+    }
+  };
+
+  const handleFindPlayersPress = () => {
+    console.log('🔍 Find Players pressed - opening screen');
+    pushToStack('sideDrawer');
+    setShowPlayerSearch(true);
+    setShowSideDrawer(false);
   };
 
   const handleStartMatchNext = async (teamA: string, teamB: string) => {
@@ -1008,6 +1212,74 @@ const HomeScreen: React.FC = () => {
     );
   }
 
+  // Show player search screen
+  if (showPlayerSearch && selectedTeamForPlayerSearch) {
+    return (
+      <PlayerSearchScreen
+        teamId={selectedTeamForPlayerSearch.id}
+        teamName={selectedTeamForPlayerSearch.name}
+        onPlayerAdded={handlePlayerAdded}
+        onBack={handlePlayerSearchBack}
+      />
+    );
+  }
+
+  // Show Team Creation Screen
+  if (showTeamCreation) {
+    return (
+      <TeamCreationScreen
+        onBack={handleTeamCreationBack}
+        onTeamCreated={handleTeamCreated}
+      />
+    );
+  }
+
+  // Show My Teams Screen
+  if (showMyTeams) {
+    return (
+      <MyTeamsScreen
+        onBack={handleMyTeamsBack}
+        onCreateTeam={handleCreateTeam}
+      />
+    );
+  }
+
+  // Show Terms of Service Screen
+  if (showTermsOfService) {
+    return (
+      <TermsOfServiceScreen
+        onBack={handleTermsOfServiceBack}
+      />
+    );
+  }
+
+  // Show Rate Us Screen
+  if (showRateUs) {
+    return (
+      <RateUsScreen
+        onBack={handleRateUsBack}
+      />
+    );
+  }
+
+  // Show Super Admin Screen (only for Super Admin)
+  if (showSuperAdmin && user?.isSuperAdmin) {
+    return (
+      <SuperAdminScreen
+        onBack={handleSuperAdminBack}
+      />
+    );
+  }
+
+  // Show Privacy Policy Screen
+  if (showPrivacyPolicy) {
+    return (
+      <PrivacyPolicyScreen
+        onBack={handlePrivacyPolicyBack}
+      />
+    );
+  }
+
   // Show notification test screen
   if (showNotificationTest) {
     return (
@@ -1321,6 +1593,11 @@ const HomeScreen: React.FC = () => {
         onTossPress={handleQuickTossPress}
         onStartMatchPress={handleStartMatchPress}
         onEnhancedFeaturesPress={handleEnhancedFeaturesPress}
+        onFindPlayersPress={() => handlePlayerSearch('find-players', 'Find Players')}
+        onCreateTeamPress={handleCreateTeam}
+        onMyTeamsPress={handleMyTeams}
+        onTermsOfServicePress={handleTermsOfServicePress}
+        onRateUsPress={handleRateUsPress}
       />
 
       {/* Match Details Modal */}
@@ -1330,6 +1607,26 @@ const HomeScreen: React.FC = () => {
           onClose={() => setShowMatchDetails(false)}
         />
       )}
+
+      {/* Side Drawer */}
+      <SideDrawer
+        visible={showSideDrawer}
+        onClose={handleSideDrawerClose}
+        user={user}
+        onProfilePress={handleSideDrawerProfilePress}
+        onLogout={handleUserLogout}
+        onTossPress={handleQuickTossPress}
+        onStartMatchPress={handleStartMatchPress}
+        onNotificationTestPress={handleNotificationTestPress}
+        onEnhancedFeaturesPress={handleEnhancedFeaturesPress}
+        onFindPlayersPress={handleFindPlayersPress}
+        onCreateTeamPress={handleCreateTeam}
+        onMyTeamsPress={handleMyTeams}
+        onTermsOfServicePress={handleTermsOfServicePress}
+        onRateUsPress={handleRateUsPress}
+        onSuperAdminPress={handleSuperAdminPress}
+        onPrivacyPolicyPress={handlePrivacyPolicyPress}
+      />
     </SafeAreaView>
   );
 };

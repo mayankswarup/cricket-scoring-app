@@ -9,18 +9,32 @@ import {
   TextInput,
   FlatList,
   Alert,
+  RefreshControl,
+  Platform,
 } from 'react-native';
 import { COLORS, SIZES, FONTS } from '../constants';
 import { liveScoringService } from '../services/liveScoringService';
+import { userProfileService, UserProfile } from '../services/userProfileService';
+import { useUser } from '../contexts/UserContext';
+import TeamSelectionModal from '../components/TeamSelectionModal';
+import { teamService } from '../services/teamService';
 
 interface Player {
   id: string;
   name: string;
   phoneNumber: string;
   role: 'batsman' | 'bowler' | 'all-rounder' | 'wicket-keeper';
-  city: string;
+  city?: string;
   isAvailable: boolean;
   currentTeam?: string;
+  profilePicture?: string | null;
+  battingHand?: 'left' | 'right' | null;
+  bowlingStyle?: 'fast' | 'medium' | 'spin' | null;
+  jerseyNumber?: number | null;
+  // Match availability fields
+  isPlayingMatch?: boolean;
+  currentMatchId?: string | null;
+  matchStartTime?: string | null;
 }
 
 interface PlayerSearchScreenProps {
@@ -36,60 +50,139 @@ const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
   onPlayerAdded, 
   onBack 
 }) => {
+  const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
+  const [showTeamSelection, setShowTeamSelection] = useState(false);
+  const [selectedPlayerForTeam, setSelectedPlayerForTeam] = useState<Player | null>(null);
 
-  // Mock player data - in real app, this would come from Firebase
-  const mockPlayers: Player[] = [
-    { id: '1', name: 'Virat Kohli', phoneNumber: '9876543210', role: 'batsman', city: 'Delhi', isAvailable: true },
-    { id: '2', name: 'Rohit Sharma', phoneNumber: '9876543211', role: 'batsman', city: 'Mumbai', isAvailable: true },
-    { id: '3', name: 'MS Dhoni', phoneNumber: '9876543212', role: 'wicket-keeper', city: 'Chennai', isAvailable: false, currentTeam: 'CSK' },
-    { id: '4', name: 'Jasprit Bumrah', phoneNumber: '9876543213', role: 'bowler', city: 'Mumbai', isAvailable: true },
-    { id: '5', name: 'Ravindra Jadeja', phoneNumber: '9876543214', role: 'all-rounder', city: 'Gujarat', isAvailable: true },
-    { id: '6', name: 'KL Rahul', phoneNumber: '9876543215', role: 'batsman', city: 'Bangalore', isAvailable: false, currentTeam: 'LSG' },
-    { id: '7', name: 'Hardik Pandya', phoneNumber: '9876543216', role: 'all-rounder', city: 'Gujarat', isAvailable: true },
-    { id: '8', name: 'Mohammed Shami', phoneNumber: '9876543217', role: 'bowler', city: 'Gujarat', isAvailable: true },
-    { id: '9', name: 'Rishabh Pant', phoneNumber: '9876543218', role: 'wicket-keeper', city: 'Delhi', isAvailable: true },
-    { id: '10', name: 'Shubman Gill', phoneNumber: '9876543219', role: 'batsman', city: 'Gujarat', isAvailable: true },
-  ];
+  // Platform-specific alert function
+  const showAlert = (title: string, message: string, buttons?: any[]) => {
+    if (Platform.OS === 'web') {
+      if (buttons && buttons.length > 0) {
+        const result = window.confirm(`${title}\n\n${message}`);
+        if (result && buttons[0] && buttons[0].onPress) {
+          buttons[0].onPress();
+        }
+      } else {
+        alert(`${title}\n\n${message}`);
+      }
+    } else {
+      Alert.alert(title, message, buttons);
+    }
+  };
 
   useEffect(() => {
     loadPlayers();
+    // Clear any previous selections when screen loads
+    setSelectedPlayers([]);
+    setShowTeamSelection(false);
+    setSelectedPlayerForTeam(null);
   }, []);
 
-  const loadPlayers = async () => {
+  // Refresh players when screen comes into focus
+  useEffect(() => {
+    const refreshPlayers = () => {
+      console.log('🔄 Refreshing players data...');
+      loadPlayers();
+    };
+
+    // Refresh when component mounts or when user changes
+    refreshPlayers();
+  }, [user?.phoneNumber]);
+
+  const loadPlayers = async (isRefresh = false) => {
     try {
-      setLoading(true);
-      // In real app, fetch from Firebase
-      // const firebasePlayers = await liveScoringService.getPlayers();
-      setPlayers(mockPlayers);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      console.log('🔍 Loading players from Firebase...');
+      
+      // Fetch all users from Firebase, excluding current user
+      const firebaseUsers = await userProfileService.getAllUsers(user?.phoneNumber);
+      
+      // Convert UserProfile to Player format
+      const firebasePlayers: Player[] = firebaseUsers.map((userProfile: UserProfile) => {
+        // Safely handle teamIds - it might be undefined for older users
+        const teamIds = userProfile.teamIds || [];
+        
+        // Debug log to see what data we're getting
+        console.log('🔍 User profile data:', {
+          phoneNumber: userProfile.phoneNumber,
+          name: userProfile.name,
+          playingRole: userProfile.playingRole,
+          teamIds: userProfile.teamIds
+        });
+        
+        return {
+          id: userProfile.phoneNumber || 'unknown',
+          name: userProfile.name || `User ${userProfile.phoneNumber?.slice(-4)}`,
+          phoneNumber: userProfile.phoneNumber || '',
+          role: userProfile.playingRole || 'batsman',
+          city: 'Unknown', // We don't have city in UserProfile yet
+          isAvailable: !userProfile.isPlayingMatch, // Available if not playing a match (can be in multiple teams)
+          currentTeam: teamIds.length > 0 ? `Team ${teamIds[0]}` : undefined,
+          profilePicture: userProfile.profilePicture,
+          battingHand: userProfile.battingHand,
+          bowlingStyle: userProfile.bowlingStyle,
+          jerseyNumber: userProfile.jerseyNumber,
+          // Match availability fields
+          isPlayingMatch: userProfile.isPlayingMatch || false,
+          currentMatchId: userProfile.currentMatchId,
+          matchStartTime: userProfile.matchStartTime,
+        };
+      });
+      
+      console.log(`✅ Loaded ${firebasePlayers.length} players from Firebase`);
+      setPlayers(firebasePlayers);
     } catch (error) {
-      console.error('Error loading players:', error);
-      setPlayers(mockPlayers);
+      console.error('❌ Error loading players from Firebase:', error);
+      // Fallback to empty array if Firebase fails
+      setPlayers([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    console.log('🔄 Pull to refresh triggered - forcing fresh data from Firebase');
+    // Clear current players to force fresh load
+    setPlayers([]);
+    loadPlayers(true);
   };
 
   const filteredPlayers = players.filter(player => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
     return (
-      player.name.toLowerCase().includes(query) ||
-      player.phoneNumber.includes(query) ||
-      player.city.toLowerCase().includes(query) ||
-      player.role.toLowerCase().includes(query)
+      (player.name && player.name.toLowerCase().includes(query)) ||
+      (player.phoneNumber && player.phoneNumber.includes(query)) ||
+      (player.city && player.city.toLowerCase().includes(query)) ||
+      (player.role && player.role.toLowerCase().includes(query)) ||
+      (player.battingHand && player.battingHand.toLowerCase().includes(query)) ||
+      (player.bowlingStyle && player.bowlingStyle.toLowerCase().includes(query))
     );
   });
 
   const handlePlayerSelect = (player: Player) => {
     if (!player.isAvailable) {
-      Alert.alert(
-        'Player Not Available',
-        `${player.name} is currently playing for ${player.currentTeam}. They cannot join another team simultaneously.`
-      );
+      if (player.isPlayingMatch) {
+        showAlert(
+          'Player Currently in Match',
+          `${player.name} is currently playing a match and cannot be added to teams. Please try again after the match ends.`
+        );
+      } else {
+        showAlert(
+          'Player Not Available',
+          `${player.name} is currently unavailable for team additions.`
+        );
+      }
       return;
     }
     
@@ -105,36 +198,131 @@ const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
   const handleAddPlayers = async () => {
     if (selectedPlayers.length === 0) return;
 
+    // Show team selection modal
+    setSelectedPlayerForTeam(selectedPlayers[0]); // For now, just use first player for team selection
+    setShowTeamSelection(true);
+  };
+
+  const handleTeamSelected = async (teamId: string, teamName: string) => {
+    if (!selectedPlayerForTeam) return;
+
     try {
-      // In real app, add players to team in Firebase
-      // await liveScoringService.addPlayersToTeam(teamId, selectedPlayers.map(p => p.id));
+      // Check if any selected players are already in this team
+      const teamData = await teamService.getTeamById(teamId);
+      if (!teamData) {
+        showAlert('Error', 'Team not found');
+        return;
+      }
+
+      const existingMemberIds = teamData.members
+        .filter(member => member.isActive)
+        .map(member => member.playerId);
+
+      const alreadyInTeam = selectedPlayers.filter(player => 
+        existingMemberIds.includes(player.phoneNumber)
+      );
+
+      if (alreadyInTeam.length > 0) {
+        const alreadyInTeamNames = alreadyInTeam.map(p => p.name).join(', ');
+        showAlert(
+          'Players Already in Team',
+          `${alreadyInTeamNames} ${alreadyInTeam.length === 1 ? 'is' : 'are'} already a member of ${teamName}`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Add Others', 
+              onPress: () => {
+                // Filter out players who are already in the team
+                const newPlayers = selectedPlayers.filter(player => 
+                  !existingMemberIds.includes(player.phoneNumber)
+                );
+                if (newPlayers.length > 0) {
+                  addPlayersToTeam(teamId, teamName, newPlayers);
+                } else {
+                  showAlert('No New Players', 'All selected players are already in this team');
+                }
+              }
+            }
+          ]
+        );
+        return;
+      }
+
+      // Add players to team in Firebase
+      await addPlayersToTeam(teamId, teamName, selectedPlayers);
       
-      const playerNames = selectedPlayers.map(p => p.name).join(', ');
-      console.log(`✅ Added ${selectedPlayers.length} player(s) to ${teamName}: ${playerNames}`);
+    } catch (error) {
+      console.error('Error adding players:', error);
+      showAlert('Error', 'Failed to add players. Please try again.');
+    }
+  };
+
+  const addPlayersToTeam = async (teamId: string, teamName: string, players: Player[]) => {
+    try {
+      // Check availability of all players before adding
+      const unavailablePlayers = [];
+      for (const player of players) {
+        const isAvailable = await userProfileService.isPlayerAvailable(player.phoneNumber);
+        if (!isAvailable) {
+          unavailablePlayers.push(player);
+        }
+      }
+
+      // If any players became unavailable, show error
+      if (unavailablePlayers.length > 0) {
+        const unavailableNames = unavailablePlayers.map(p => p.name).join(', ');
+        showAlert(
+          'Players No Longer Available',
+          `${unavailableNames} ${unavailablePlayers.length === 1 ? 'is' : 'are'} currently playing a match and cannot be added to teams.`
+        );
+        return;
+      }
+
+      // Prepare player data for Firebase
+      const playersToAdd = players.map(player => ({
+        playerId: player.phoneNumber, // Use phone number as player ID
+        name: player.name,
+        phoneNumber: player.phoneNumber,
+      }));
+
+      // Add players to team in Firebase
+      await teamService.addPlayersToTeam(teamId, playersToAdd);
+      
+      // Also add team to each player's profile (only for new players)
+      for (const player of players) {
+        try {
+          await userProfileService.addUserToTeam(player.phoneNumber, teamId);
+        } catch (error) {
+          console.error(`❌ Failed to add team to player ${player.name}:`, error);
+          // Continue with other players even if one fails
+        }
+      }
+      
+      const playerNames = players.map(p => p.name).join(', ');
+      console.log(`✅ Added ${players.length} player(s) to ${teamName}: ${playerNames}`);
       
       // Call onPlayerAdded for each player
-      selectedPlayers.forEach(player => onPlayerAdded(player));
+      players.forEach(player => onPlayerAdded(player));
       
-      Alert.alert(
-        'Players Added',
-        `${selectedPlayers.length} player(s) have been added to ${teamName}`,
+      // Clear selections and close screen
+      setSelectedPlayers([]);
+      setShowTeamSelection(false);
+      setSelectedPlayerForTeam(null);
+      
+      showAlert(
+        'Players Added Successfully!',
+        `${players.length} player(s) have been added to ${teamName}`,
         [
           {
-            text: 'Add More',
-            onPress: () => setSelectedPlayers([])
-          },
-          {
-            text: 'Done',
+            text: 'OK',
             onPress: () => onBack()
           }
         ]
       );
       
-      setSelectedPlayers([]);
-      
     } catch (error) {
       console.error('Error adding players:', error);
-      Alert.alert('Error', 'Failed to add players. Please try again.');
+      showAlert('Error', 'Failed to add players. Please try again.');
     }
   };
 
@@ -159,14 +347,20 @@ const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
           {item.name}
         </Text>
         <Text style={styles.playerDetails}>
-          📱 {item.phoneNumber} • 🏙️ {item.city}
+          📱 {item.phoneNumber} • 🏙️ {item.city || 'Unknown'}
         </Text>
         <Text style={styles.playerRole}>
           {item.role.charAt(0).toUpperCase() + item.role.slice(1).replace('-', ' ')}
+          {item.battingHand && ` • ${item.battingHand}-handed`}
+          {item.bowlingStyle && ` • ${item.bowlingStyle} bowler`}
+          {item.jerseyNumber && ` • #${item.jerseyNumber}`}
         </Text>
         {!item.isAvailable && (
           <Text style={styles.unavailableText}>
-            ⚠️ Currently playing for {item.currentTeam}
+            {item.isPlayingMatch 
+              ? `🏏 Currently playing a match (Match ID: ${item.currentMatchId?.slice(-6) || 'Unknown'})`
+              : `⚠️ Currently unavailable`
+            }
           </Text>
         )}
       </View>
@@ -225,8 +419,12 @@ const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
             </Text>
           </View>
           <TouchableOpacity
-            style={styles.addButton}
-            onPress={handleAddPlayers}
+            style={[
+              styles.addButton,
+              selectedPlayers.length === 0 && styles.addButtonDisabled
+            ]}
+            onPress={selectedPlayers.length > 0 ? handleAddPlayers : undefined}
+            disabled={selectedPlayers.length === 0}
           >
             <Text style={styles.addButtonText}>
               Add to Team
@@ -236,18 +434,50 @@ const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
       )}
 
       {/* Players List */}
-      <FlatList
-        data={filteredPlayers}
-        renderItem={renderPlayerCard}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.playersList}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No players found</Text>
-            <Text style={styles.emptySubtext}>Try adjusting your search</Text>
-          </View>
-        }
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading players...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredPlayers}
+          renderItem={renderPlayerCard}
+          keyExtractor={(item, index) => `${item.phoneNumber}-${index}`}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.playersList}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.primary]}
+              tintColor={COLORS.primary}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>
+                {players.length === 0 ? 'No registered players found' : 'No players match your search'}
+              </Text>
+              <Text style={styles.emptySubtext}>
+                {players.length === 0 
+                  ? 'Be the first to register and invite others!' 
+                  : 'Try adjusting your search terms'
+                }
+              </Text>
+            </View>
+          }
+        />
+      )}
+
+      {/* Team Selection Modal */}
+      <TeamSelectionModal
+        visible={showTeamSelection}
+        onClose={() => {
+          setShowTeamSelection(false);
+          setSelectedPlayerForTeam(null);
+        }}
+        onTeamSelected={handleTeamSelected}
+        playerName={selectedPlayerForTeam?.name || 'Player'}
       />
     </SafeAreaView>
   );
@@ -347,6 +577,10 @@ const styles = StyleSheet.create({
     paddingVertical: SIZES.sm,
     borderRadius: SIZES.radius,
   },
+  addButtonDisabled: {
+    backgroundColor: COLORS.lightGray,
+    opacity: 0.6,
+  },
   disabledButton: {
     backgroundColor: COLORS.lightGray,
   },
@@ -441,6 +675,17 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     fontFamily: FONTS.regular,
+    color: COLORS.textSecondary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SIZES.xl,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: FONTS.medium,
     color: COLORS.textSecondary,
   },
 });
