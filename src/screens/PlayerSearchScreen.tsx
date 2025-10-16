@@ -99,7 +99,7 @@ const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
       if (isRefresh) {
         setRefreshing(true);
       } else {
-        setLoading(true);
+      setLoading(true);
       }
       console.log('🔍 Loading players from Firebase...');
       
@@ -179,9 +179,9 @@ const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
         );
       } else {
         showAlert(
-          'Player Not Available',
+        'Player Not Available',
           `${player.name} is currently unavailable for team additions.`
-        );
+      );
       }
       return;
     }
@@ -439,12 +439,12 @@ const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
           <Text style={styles.loadingText}>Loading players...</Text>
         </View>
       ) : (
-        <FlatList
-          data={filteredPlayers}
-          renderItem={renderPlayerCard}
+      <FlatList
+        data={filteredPlayers}
+        renderItem={renderPlayerCard}
           keyExtractor={(item, index) => `${item.phoneNumber}-${index}`}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.playersList}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.playersList}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -453,8 +453,8 @@ const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
               tintColor={COLORS.primary}
             />
           }
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
               <Text style={styles.emptyText}>
                 {players.length === 0 ? 'No registered players found' : 'No players match your search'}
               </Text>
@@ -464,8 +464,8 @@ const PlayerSearchScreen: React.FC<PlayerSearchScreenProps> = ({
                   : 'Try adjusting your search terms'
                 }
               </Text>
-            </View>
-          }
+          </View>
+        }
         />
       )}
 
