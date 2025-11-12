@@ -117,7 +117,7 @@ const TeamCreationForm: React.FC<TeamCreationFormProps> = ({ onTeamCreated, onCa
       setIsLoading(true);
       
       // Create team in Firebase
-      const teamId = await liveScoringService.createTeam({
+      const teamId = await liveScoringService.createBasicTeam({
         name: formData.name.trim(),
         shortName: formData.shortName.trim().toUpperCase(),
         city: formData.city.trim(),

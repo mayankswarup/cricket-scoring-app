@@ -20,6 +20,8 @@ interface ShotDetailsModalProps {
   onConfirm: (shotDetails: ShotDetails) => void;
   runs: number;
   isWicket: boolean;
+  batsmanName?: string;
+  bowlerName?: string;
 }
 
 export interface ShotDetails {
@@ -35,6 +37,8 @@ const ShotDetailsModal: React.FC<ShotDetailsModalProps> = ({
   onConfirm,
   runs,
   isWicket,
+  batsmanName,
+  bowlerName,
 }) => {
   const [selectedShotType, setSelectedShotType] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('');
@@ -43,10 +47,11 @@ const ShotDetailsModal: React.FC<ShotDetailsModalProps> = ({
 
   // Auto-generate commentary based on selections
   const generateCommentary = (shotType: string, region: string, quality: string) => {
-    const playerName = "Rohit Sharma"; // You can make this dynamic later
+    const playerName = batsmanName || 'the batter';
+    const bowlerText = bowlerName ? ` off ${bowlerName}` : '';
     const runsText = runs === 6 ? "6" : runs === 4 ? "4" : `${runs} run${runs > 1 ? 's' : ''}`;
     
-    let baseCommentary = `What a ${shotType.toLowerCase()} by ${playerName}!`;
+    let baseCommentary = `What a ${shotType.toLowerCase()} by ${playerName}${bowlerText}!`;
     
     if (region) {
       baseCommentary += ` He has hit it to ${region}`;
@@ -63,12 +68,23 @@ const ShotDetailsModal: React.FC<ShotDetailsModalProps> = ({
 
   const handleConfirm = () => {
     // Allow confirmation with just runs - shot details are optional
-    onConfirm({
-      shotType: selectedShotType || undefined,
-      shotRegion: selectedRegion || undefined,
-      shotQuality: selectedQuality || undefined,
-      commentary: commentary.trim() || undefined, // Optional field - only include if user wrote something
-    });
+    const trimmedCommentary = commentary.trim();
+    const shotDetails: ShotDetails = {};
+
+    if (selectedShotType) {
+      shotDetails.shotType = selectedShotType;
+    }
+    if (selectedRegion) {
+      shotDetails.shotRegion = selectedRegion;
+    }
+    if (selectedQuality) {
+      shotDetails.shotQuality = selectedQuality;
+    }
+    if (trimmedCommentary) {
+      shotDetails.commentary = trimmedCommentary;
+    }
+
+    onConfirm(shotDetails);
     // Reset selections
     setSelectedShotType('');
     setSelectedRegion('');
@@ -200,7 +216,7 @@ const ShotDetailsModal: React.FC<ShotDetailsModalProps> = ({
       </View>
       <TextInput
         style={styles.commentaryTextArea}
-        placeholder="e.g., What a pull shot by Rohit Sharma! He has hit it for a mind-blowing 6!"
+        placeholder={`e.g., What a pull shot by ${batsmanName || 'the batter'}! He has hit it for ${runs === 6 ? 'a massive 6' : runs === 4 ? 'a cracking boundary' : `${runs} runs`}!`}
         placeholderTextColor={COLORS.gray}
         value={commentary}
         onChangeText={setCommentary}

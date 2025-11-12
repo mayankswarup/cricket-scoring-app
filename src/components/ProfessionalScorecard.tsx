@@ -12,6 +12,8 @@ interface BattingStats {
   strikeRate: number;
   minutes: number;
   isOut: boolean;
+  isCurrentlyBatting?: boolean;
+  isOnStrike?: boolean;
   dismissal?: string;
 }
 
@@ -34,6 +36,7 @@ interface FallOfWicket {
 
 interface ProfessionalScorecardProps {
   battingStats: BattingStats[];
+  yetToBat: string[];
   bowlingStats: BowlingStats[];
   fallOfWickets: FallOfWicket[];
   totalRuns: number;
@@ -46,6 +49,7 @@ interface ProfessionalScorecardProps {
 
 const ProfessionalScorecard: React.FC<ProfessionalScorecardProps> = ({
   battingStats,
+  yetToBat,
   bowlingStats,
   fallOfWickets,
   totalRuns,
@@ -72,7 +76,8 @@ const ProfessionalScorecard: React.FC<ProfessionalScorecardProps> = ({
         <View key={player.id} style={styles.tableRow}>
           <View style={styles.batterColumn}>
             <Text style={styles.batterName}>
-              {player.name} {!player.isOut && '*'}
+              {player.name}
+              {player.isCurrentlyBatting ? ' *' : ''}
             </Text>
             {player.dismissal && (
               <Text style={styles.dismissal}>{player.dismissal}</Text>
@@ -84,12 +89,25 @@ const ProfessionalScorecard: React.FC<ProfessionalScorecardProps> = ({
           <Text style={styles.numberCell}>{player.balls}</Text>
           <Text style={styles.numberCell}>{player.fours}</Text>
           <Text style={styles.numberCell}>{player.sixes}</Text>
-          <Text style={[styles.numberCell, { color: player.strikeRate >= 100 ? COLORS.success : COLORS.text }]}>
-            {player.strikeRate.toFixed(1)}
+          <Text
+            style={[
+              styles.numberCell,
+              {
+                color: player.balls > 0 && player.strikeRate >= 100 ? COLORS.success : COLORS.text,
+              },
+            ]}
+          >
+            {player.balls > 0 ? player.strikeRate.toFixed(1) : '--'}
           </Text>
           <Text style={styles.numberCell}>{player.minutes}</Text>
         </View>
       ))}
+      {yetToBat.length > 0 && (
+        <View style={styles.yetToBatRow}>
+          <Text style={styles.yetToBatLabel}>Yet to bat</Text>
+          <Text style={styles.yetToBatNames}>{yetToBat.join(', ')}</Text>
+        </View>
+      )}
     </View>
   );
 
@@ -153,11 +171,13 @@ const ProfessionalScorecard: React.FC<ProfessionalScorecardProps> = ({
       </View>
 
       {/* Extras */}
-      <View style={styles.extrasContainer}>
-        <Text style={styles.extrasText}>
-          Extras: {extras} (wd {extras})
-        </Text>
-      </View>
+      {!!extras && (
+        <View style={styles.extrasContainer}>
+          <Text style={styles.extrasText}>
+            Extras: {extras}
+          </Text>
+        </View>
+      )}
 
       {/* Batting Table */}
       {renderBattingTable()}
@@ -272,6 +292,26 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.regular,
     color: COLORS.textSecondary,
     fontStyle: 'italic',
+  },
+  yetToBatRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: SIZES.sm,
+    paddingHorizontal: SIZES.md,
+    borderTopWidth: 0.5,
+    borderTopColor: COLORS.lightGray,
+  },
+  yetToBatLabel: {
+    fontSize: 12,
+    fontFamily: FONTS.bold,
+    color: COLORS.textSecondary,
+    marginRight: SIZES.sm,
+  },
+  yetToBatNames: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.text,
   },
   numberCell: {
     fontSize: 14,

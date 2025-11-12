@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,76 +8,68 @@ import {
   Alert,
 } from 'react-native';
 import { COLORS, SIZES, FONTS } from '../constants';
+import { Player as LivePlayer } from '../services/liveScoringService';
 import { UI_CONFIG } from '../config/appConfig';
 
 interface Playing11ScreenProps {
-  teamA: string;
-  teamB: string;
+  teamAName: string;
+  teamBName: string;
+  teamAPlayers: LivePlayer[];
+  teamBPlayers: LivePlayer[];
   tossWinner: string;
   tossDecision: string;
   onBack: () => void;
-  onStartMatch: () => void;
+  onStartMatch: (lineups: { teamA: LivePlayer[]; teamB: LivePlayer[] }) => void;
 }
 
-interface Player {
-  id: string;
-  name: string;
-  role: 'batsman' | 'bowler' | 'all-rounder' | 'wicket-keeper';
+interface Player extends LivePlayer {
   isSelected: boolean;
 }
 
 const Playing11Screen: React.FC<Playing11ScreenProps> = ({ 
-  teamA, 
-  teamB, 
+  teamAName,
+  teamBName,
+  teamAPlayers,
+  teamBPlayers,
   tossWinner, 
   tossDecision,
   onBack, 
   onStartMatch 
 }) => {
   const [currentTeam, setCurrentTeam] = useState<'A' | 'B'>('A');
-  const [teamAPlayers, setTeamAPlayers] = useState<Player[]>([
-    { id: '1', name: 'Virat Kohli', role: 'batsman', isSelected: false },
-    { id: '2', name: 'Rohit Sharma', role: 'batsman', isSelected: false },
-    { id: '3', name: 'MS Dhoni', role: 'wicket-keeper', isSelected: false },
-    { id: '4', name: 'Jasprit Bumrah', role: 'bowler', isSelected: false },
-    { id: '5', name: 'Ravindra Jadeja', role: 'all-rounder', isSelected: false },
-    { id: '6', name: 'KL Rahul', role: 'batsman', isSelected: false },
-    { id: '7', name: 'Hardik Pandya', role: 'all-rounder', isSelected: false },
-    { id: '8', name: 'Mohammed Shami', role: 'bowler', isSelected: false },
-    { id: '9', name: 'Yuzvendra Chahal', role: 'bowler', isSelected: false },
-    { id: '10', name: 'Shikhar Dhawan', role: 'batsman', isSelected: false },
-    { id: '11', name: 'Rishabh Pant', role: 'wicket-keeper', isSelected: false },
-    { id: '12', name: 'Bhuvneshwar Kumar', role: 'bowler', isSelected: false },
-  ]);
-  
-  const [teamBPlayers, setTeamBPlayers] = useState<Player[]>([
-    { id: '13', name: 'Steve Smith', role: 'batsman', isSelected: false },
-    { id: '14', name: 'David Warner', role: 'batsman', isSelected: false },
-    { id: '15', name: 'Pat Cummins', role: 'bowler', isSelected: false },
-    { id: '16', name: 'Glenn Maxwell', role: 'all-rounder', isSelected: false },
-    { id: '17', name: 'Mitchell Starc', role: 'bowler', isSelected: false },
-    { id: '18', name: 'Aaron Finch', role: 'batsman', isSelected: false },
-    { id: '19', name: 'Josh Hazlewood', role: 'bowler', isSelected: false },
-    { id: '20', name: 'Marcus Stoinis', role: 'all-rounder', isSelected: false },
-    { id: '21', name: 'Alex Carey', role: 'wicket-keeper', isSelected: false },
-    { id: '22', name: 'Adam Zampa', role: 'bowler', isSelected: false },
-    { id: '23', name: 'Marnus Labuschagne', role: 'batsman', isSelected: false },
-    { id: '24', name: 'Nathan Lyon', role: 'bowler', isSelected: false },
-  ]);
+  const buildSelection = useCallback(
+    (players: LivePlayer[]) =>
+      players.map((player, index) => ({
+        ...player,
+        isSelected: index < 11 || players.length <= 11,
+      })),
+    []
+  );
 
-  const currentPlayers = currentTeam === 'A' ? teamAPlayers : teamBPlayers;
+  const [teamASelection, setTeamASelection] = useState<Player[]>(() => buildSelection(teamAPlayers));
+  const [teamBSelection, setTeamBSelection] = useState<Player[]>(() => buildSelection(teamBPlayers));
+
+  useEffect(() => {
+    setTeamASelection(buildSelection(teamAPlayers));
+  }, [teamAPlayers, buildSelection]);
+
+  useEffect(() => {
+    setTeamBSelection(buildSelection(teamBPlayers));
+  }, [teamBPlayers, buildSelection]);
+
+  const currentPlayers = currentTeam === 'A' ? teamASelection : teamBSelection;
   const selectedCount = currentPlayers.filter(p => p.isSelected).length;
   const canProceed = selectedCount === 11;
 
   const handlePlayerToggle = (playerId: string) => {
     if (currentTeam === 'A') {
-      setTeamAPlayers(prev => 
+      setTeamASelection(prev => 
         prev.map(p => 
           p.id === playerId ? { ...p, isSelected: !p.isSelected } : p
         )
       );
     } else {
-      setTeamBPlayers(prev => 
+      setTeamBSelection(prev => 
         prev.map(p => 
           p.id === playerId ? { ...p, isSelected: !p.isSelected } : p
         )
@@ -86,12 +78,28 @@ const Playing11Screen: React.FC<Playing11ScreenProps> = ({
   };
 
   const handleNext = () => {
+    if (selectedCount !== 11) {
+      Alert.alert('Selection Incomplete', 'Please select exactly 11 players before continuing.');
+      return;
+    }
+
     if (currentTeam === 'A') {
       setCurrentTeam('B');
-    } else {
-      // Both teams selected, start match
-      onStartMatch();
+      return;
     }
+
+    const selectedTeamA = teamASelection.filter(player => player.isSelected).map(({ isSelected, ...rest }) => rest);
+    const selectedTeamB = teamBSelection.filter(player => player.isSelected).map(({ isSelected, ...rest }) => rest);
+
+    if (selectedTeamA.length !== 11 || selectedTeamB.length !== 11) {
+      Alert.alert('Selection Incomplete', 'Please ensure both teams have exactly 11 players selected.');
+      return;
+    }
+
+    onStartMatch({
+      teamA: selectedTeamA,
+      teamB: selectedTeamB,
+    });
   };
 
   const handleBack = () => {
@@ -120,7 +128,7 @@ const Playing11Screen: React.FC<Playing11ScreenProps> = ({
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>
-          Playing 11 - {currentTeam === 'A' ? teamA : teamB}
+          Playing 11 - {currentTeam === 'A' ? teamAName : teamBName}
         </Text>
         <View style={styles.placeholder} />
       </View>
@@ -128,7 +136,7 @@ const Playing11Screen: React.FC<Playing11ScreenProps> = ({
       <View style={styles.content}>
         {/* Match Info */}
         <View style={styles.matchInfo}>
-          <Text style={styles.matchTitle}>{teamA} vs {teamB}</Text>
+          <Text style={styles.matchTitle}>{teamAName} vs {teamBName}</Text>
           <Text style={styles.tossInfo}>
             {tossWinner} won toss & chose to {tossDecision.toLowerCase()}
           </Text>
@@ -141,7 +149,7 @@ const Playing11Screen: React.FC<Playing11ScreenProps> = ({
             onPress={() => setCurrentTeam('A')}
           >
             <Text style={[styles.teamTabText, currentTeam === 'A' && styles.activeTeamTabText]}>
-              {teamA}
+              {teamAName}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -149,7 +157,7 @@ const Playing11Screen: React.FC<Playing11ScreenProps> = ({
             onPress={() => setCurrentTeam('B')}
           >
             <Text style={[styles.teamTabText, currentTeam === 'B' && styles.activeTeamTabText]}>
-              {teamB}
+              {teamBName}
             </Text>
           </TouchableOpacity>
         </View>

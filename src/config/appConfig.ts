@@ -95,6 +95,11 @@ export const APP_CONFIG = {
     REAL_TIME_SYNC: true,
   },
 
+  // Debug / Logging Controls
+  DEBUG: {
+    ENABLE_VERBOSE_LOGS: false,
+  },
+
   // App Store Optimization
   SEO: {
     KEYWORDS: ['cricket', 'scoring', 'live score', 'cricket app', 'match tracking'],

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -30,7 +30,7 @@ import SideDrawer from '../components/SideDrawer';
 import PlayerRegistrationScreen from './PlayerRegistrationScreen';
 import UserProfileScreen from './UserProfileScreen';
 import TossScreen from './TossScreen';
-import LiveScoringScreen from './LiveScoringScreen';
+import LiveScoringScreen, { MatchSummary } from './LiveScoringScreen';
 import MatchManagementScreen from './MatchManagementScreen';
 import StartMatchScreen from './StartMatchScreen';
 import Playing11Screen from './Playing11Screen';
@@ -48,13 +48,101 @@ import TermsOfServiceScreen from './TermsOfServiceScreen';
 import RateUsScreen from './RateUsScreen';
 import SuperAdminScreen from './SuperAdminScreen';
 import PrivacyPolicyScreen from './PrivacyPolicyScreen';
+import AboutUsScreen from './AboutUsScreen';
+import OverSelectionScreen from './OverSelectionScreen';
 // import TeamCreationScreen from './TeamCreationScreen';
 // import { apiService } from '../services/api';
 import { authService } from '../services/authService';
 import { PlayerRegistration } from '../types';
-import { initializeDemoData } from '../utils/demoData';
+import { initializeDemoData, MANUAL_TEST_TEAMS } from '../utils/demoData';
+import { liveScoringService, Team as LiveTeam, Player as LivePlayer } from '../services/liveScoringService';
+import { REAL_CRICKET_TEAMS } from '../data/realCricketData';
+const sanitizeForFirestore = (value: any): any => {
+  if (Array.isArray(value)) {
+    return value
+      .map(sanitizeForFirestore)
+      .filter((item) => item !== undefined && item !== null);
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce((acc, [key, val]) => {
+      if (val === undefined || val === null) {
+        return acc;
+      }
+      const sanitized = sanitizeForFirestore(val);
+      if (sanitized !== undefined && sanitized !== null) {
+        acc[key] = sanitized;
+      }
+      return acc;
+    }, {} as Record<string, any>);
+  }
+
+  return value;
+};
+
+const normalizeLivePlayers = (players: any[] = []): LivePlayer[] =>
+  players
+    .filter(Boolean)
+    .map((player) => ({
+      id: player.id,
+      name: player.name,
+      role: player.role || 'batsman',
+      shortName: player.shortName || player.name?.split(' ')[0] || player.name,
+      battingStyle: player.battingStyle || null,
+      bowlingStyle: player.bowlingStyle || null,
+      nationality: player.nationality || null,
+      jerseyNumber: player.jerseyNumber || null,
+      isCaptain: !!player.isCaptain,
+      isWicketKeeper: !!player.isWicketKeeper,
+    }));
+
+const toLiveTeam = (team: any | null | undefined): LiveTeam | null => {
+  if (!team || !team.id || !team.name) {
+    return null;
+  }
+  const players = normalizeLivePlayers(team.players);
+  const captainId =
+    team.captain ||
+    players.find((player) => player.isCaptain)?.id ||
+    players[0]?.id;
+  const wicketKeeperId =
+    team.wicketKeeper ||
+    players.find((player) => player.isWicketKeeper)?.id ||
+    players[0]?.id;
+
+  return {
+    id: team.id,
+    name: team.name,
+    shortName: team.shortName || team.name.slice(0, 3).toUpperCase(),
+    city: team.city,
+    logo: team.logo,
+    players,
+    captain: captainId,
+    wicketKeeper: wicketKeeperId,
+    coach: team.coach,
+  };
+};
+
+const MATCH_STORAGE_KEYS = [
+  'currentMatchId',
+  'currentMatchTeams',
+  'currentPlayingXI',
+  'currentMatchSetup',
+  'currentTossResult',
+  'currentMatchOvers',
+];
 // import { Match } from '../types';
 // import { TeamCreation } from '../types';
+
+type AutoMatchStep =
+  | 'idle'
+  | 'teamSelection'
+  | 'toss'
+  | 'overSelection'
+  | 'playingXI'
+  | 'matchSetup'
+  | 'simulate'
+  | 'complete';
 
 const HomeScreen: React.FC = () => {
   // Navigation states
@@ -84,8 +172,7 @@ const HomeScreen: React.FC = () => {
     };
   };
 
-  const matchSlides = [
-    getUserTeamMatch(), // First slide is always user's team
+  const staticMatchSlides = [
     {
       status: 'LIVE',
       overs: '15.3',
@@ -142,6 +229,9 @@ const HomeScreen: React.FC = () => {
       time: '7:30 PM'
     }
   ];
+
+  const buildInitialSlides = () => [getUserTeamMatch(), ...staticMatchSlides];
+  const [recentMatches, setRecentMatches] = useState(() => buildInitialSlides());
   
   // Player authentication states
   const [currentPlayer, setCurrentPlayer] = useState<PlayerRegistration | null>(null);
@@ -161,14 +251,17 @@ const HomeScreen: React.FC = () => {
   const [showMatchHistory, setShowMatchHistory] = useState(false);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [sessionMatchId, setSessionMatchId] = useState<string | null>(null);
-  const [matchTeams, setMatchTeams] = useState<{teamA: string, teamB: string} | null>(null);
+  const [selectedTeams, setSelectedTeams] = useState<{ teamA: LiveTeam; teamB: LiveTeam } | null>(null);
   const [tossResult, setTossResult] = useState<{winner: string, decision: string} | null>(null);
+  const [showOverSelection, setShowOverSelection] = useState(false);
+  const [selectedOvers, setSelectedOvers] = useState<number>(20);
   const [matchSetupData, setMatchSetupData] = useState<{
     battingOrder: string[];
     bowlingOrder: string[];
     teamAPlayers: any[];
     teamBPlayers: any[];
   } | null>(null);
+  const [selectedPlayingXI, setSelectedPlayingXI] = useState<{ teamA: LivePlayer[]; teamB: LivePlayer[] } | null>(null);
   
   // User and Admin Management
   const { user, logout } = useUser();
@@ -199,6 +292,110 @@ const HomeScreen: React.FC = () => {
   const [showRateUs, setShowRateUs] = useState(false);
   const [showSuperAdmin, setShowSuperAdmin] = useState(false);
   const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showAboutUs, setShowAboutUs] = useState(false);
+  const [isAutoMatchRunning, setIsAutoMatchRunning] = useState(false);
+  const [autoMatchStep, setAutoMatchStep] = useState<AutoMatchStep>('idle');
+  const [autoMatchStatus, setAutoMatchStatus] = useState<string>('');
+  const [autoSimulationRequested, setAutoSimulationRequested] = useState(false);
+
+  const hasActiveMatch = !!(selectedMatchId || sessionMatchId);
+
+  const AUTO_TEAM_A_ID = 'mumbai-indians';
+  const AUTO_TEAM_B_ID = 'chennai-super-kings';
+
+  const fetchAutoMatchTeams = useCallback(async () => {
+    const normalizePlayer = (player: any): LivePlayer => ({
+      id: player.id,
+      name: player.name,
+      role: player.role || 'batsman',
+      shortName: player.shortName || player.name,
+      battingStyle: player.battingStyle || null,
+      bowlingStyle: player.bowlingStyle || null,
+      jerseyNumber: player.jerseyNumber,
+      isCaptain: player.isCaptain,
+      isWicketKeeper: player.isWicketKeeper,
+    });
+
+    const convertRealTeam = (team: typeof REAL_CRICKET_TEAMS[number]): LiveTeam => ({
+      id: team.id,
+      name: team.name,
+      shortName: team.shortName,
+      city: team.city,
+      logo: team.logo,
+      players: team.players.map(normalizePlayer),
+      captain: team.players.find(player => player.isCaptain)?.id,
+      wicketKeeper: team.players.find(player => player.isWicketKeeper)?.id,
+    });
+
+    const realTeamsMap = new Map(REAL_CRICKET_TEAMS.map(team => [team.id, convertRealTeam(team)]));
+
+    let teams = await liveScoringService.getAllTeams();
+    if (!teams.length) {
+      await initializeDemoData();
+      teams = await liveScoringService.getAllTeams();
+    }
+
+    const sanitizedTeams = teams
+      .map(team => ({
+        ...team,
+        players: (team.players || []).map(normalizePlayer),
+      }))
+      .filter(team => team.players && team.players.length > 0);
+
+    const resolveTeam = (teamId: string, fallbackId?: string): LiveTeam => {
+      const fromDb = sanitizedTeams.find(team => team.id === teamId);
+      if (fromDb && fromDb.players.length >= 11) {
+        return {
+          ...fromDb,
+          shortName: fromDb.shortName || fromDb.name.slice(0, 3).toUpperCase(),
+          players: fromDb.players.slice(0, 11),
+        };
+      }
+
+      const fallback = realTeamsMap.get(teamId) || (fallbackId ? realTeamsMap.get(fallbackId) : undefined);
+      if (fallback) {
+        return {
+          ...fallback,
+          players: fallback.players.slice(0, 11),
+        };
+      }
+
+      throw new Error(`Team ${teamId} not found with sufficient players`);
+    };
+
+    const teamA = resolveTeam(AUTO_TEAM_A_ID, sanitizedTeams[0]?.id);
+    const teamB = resolveTeam(
+      AUTO_TEAM_B_ID,
+      sanitizedTeams.find(team => team.id !== teamA.id)?.id || REAL_CRICKET_TEAMS.find(team => team.id !== teamA.id)?.id
+    );
+
+    const teamAPlayers = teamA.players.slice(0, 11);
+    const teamBPlayers = teamB.players.slice(0, 11);
+
+    const battingOrder = teamAPlayers.map(player => player.id);
+
+    const preferredBowlers = teamBPlayers.filter(player => {
+      const role = (player.role || '').toLowerCase();
+      return role.includes('bowler') || role.includes('all-rounder') || role.includes('allrounder');
+    });
+    const supportingBowlers = teamBPlayers.filter(player => !preferredBowlers.includes(player));
+    const composedBowlingOrder = [...preferredBowlers, ...supportingBowlers]
+      .slice(0, Math.min(8, teamBPlayers.length))
+      .map(player => player.id);
+
+    const bowlingOrder = composedBowlingOrder.length
+      ? composedBowlingOrder
+      : teamBPlayers.map(player => player.id);
+
+    return {
+      teamA,
+      teamB,
+      battingOrder,
+      bowlingOrder,
+      teamAPlayers,
+      teamBPlayers,
+    };
+  }, []);
 
   // Helper functions for navigation stack
   const pushToStack = (screen: string) => {
@@ -228,17 +425,96 @@ const HomeScreen: React.FC = () => {
     try {
       const savedMatchId = await AsyncStorage.getItem('currentMatchId');
       const savedMatchTeams = await AsyncStorage.getItem('currentMatchTeams');
+      const savedPlayingXI = await AsyncStorage.getItem('currentPlayingXI');
+      const savedMatchSetup = await AsyncStorage.getItem('currentMatchSetup');
       const savedTossResult = await AsyncStorage.getItem('currentTossResult');
-      
+      const savedOvers = await AsyncStorage.getItem('currentMatchOvers');
+
       if (savedMatchId) {
         setSelectedMatchId(savedMatchId);
+        setSessionMatchId(savedMatchId);
         console.log('🔄 Restored match state:', savedMatchId);
       }
+
+      let restoredTeamA: LiveTeam | null = null;
+      let restoredTeamB: LiveTeam | null = null;
+
       if (savedMatchTeams) {
-        setMatchTeams(JSON.parse(savedMatchTeams));
+        const parsed = JSON.parse(savedMatchTeams);
+        const storedTeamA = parsed?.teamA;
+        const storedTeamB = parsed?.teamB;
+
+        const tryResolveTeam = async (storedTeam: any): Promise<LiveTeam | null> => {
+          if (!storedTeam) {
+            return null;
+          }
+          if (storedTeam.id) {
+            try {
+              const teamFromDb = await liveScoringService.getTeam(storedTeam.id);
+              if (teamFromDb) {
+                return toLiveTeam(teamFromDb);
+              }
+            } catch (err) {
+              console.warn('⚠️ Failed to restore team from Firestore:', storedTeam.id, err);
+            }
+          }
+          const localTeam = toLiveTeam(storedTeam);
+          if (localTeam) {
+            return localTeam;
+          }
+          const manualTeam =
+            MANUAL_TEST_TEAMS.find((team) => team.id === storedTeam.id) ||
+            REAL_CRICKET_TEAMS.find((team) => team.id === storedTeam.id);
+          return toLiveTeam(manualTeam);
+        };
+
+        restoredTeamA = await tryResolveTeam(storedTeamA);
+        restoredTeamB = await tryResolveTeam(storedTeamB);
+
+        if (restoredTeamA && restoredTeamB) {
+          setSelectedTeams({ teamA: restoredTeamA, teamB: restoredTeamB });
+        }
       }
+
+      if (savedPlayingXI) {
+        try {
+          const parsed = JSON.parse(savedPlayingXI);
+          if (parsed?.teamA || parsed?.teamB) {
+            setSelectedPlayingXI({
+              teamA: normalizeLivePlayers(parsed.teamA),
+              teamB: normalizeLivePlayers(parsed.teamB),
+            });
+          }
+        } catch (err) {
+          console.warn('⚠️ Failed to parse saved playing XI', err);
+        }
+      }
+
+      if (savedMatchSetup) {
+        try {
+          const parsed = JSON.parse(savedMatchSetup);
+          if (parsed?.teamAPlayers && parsed?.teamBPlayers) {
+            setMatchSetupData({
+              battingOrder: parsed.battingOrder || [],
+              bowlingOrder: parsed.bowlingOrder || [],
+              teamAPlayers: normalizeLivePlayers(parsed.teamAPlayers),
+              teamBPlayers: normalizeLivePlayers(parsed.teamBPlayers),
+            });
+          }
+        } catch (err) {
+          console.warn('⚠️ Failed to parse saved match setup', err);
+        }
+      }
+
       if (savedTossResult) {
         setTossResult(JSON.parse(savedTossResult));
+      }
+
+      if (savedOvers) {
+        const parsedOvers = Number(savedOvers);
+        if (!Number.isNaN(parsedOvers) && parsedOvers > 0) {
+          setSelectedOvers(parsedOvers);
+        }
       }
     } catch (error) {
       console.error('Error loading match state:', error);
@@ -441,6 +717,68 @@ const HomeScreen: React.FC = () => {
     setShowMatchManagement(false);
   };
 
+  const clearMatchState = useCallback(async () => {
+    console.log('🧹 Clearing current match state');
+    setShowLiveScoring(false);
+    setShowMatchSetup(false);
+    setShowPlaying11(false);
+    setShowOverSelection(false);
+    setShowToss(false);
+    setSelectedMatchId(null);
+    setSessionMatchId(null);
+    setSelectedTeams(null);
+    setSelectedPlayingXI(null);
+    setMatchSetupData(null);
+    setTossResult(null);
+    setSelectedOvers(20);
+    setAutoSimulationRequested(false);
+    setIsAutoMatchRunning(false);
+    setAutoMatchStatus('');
+    setAutoMatchStep('idle');
+    setActiveTab('home');
+    setCurrentScreen('home');
+    setNavigationStack(['home']);
+
+    try {
+      await AsyncStorage.multiRemove(MATCH_STORAGE_KEYS);
+      console.log('✅ Cleared cached match state');
+    } catch (error) {
+      console.error('❌ Failed to clear cached match state:', error);
+    }
+  }, []);
+
+  const handleResetMatch = async () => {
+    if (!hasActiveMatch) {
+      Alert.alert('No Active Match', 'There is no ongoing match to reset.');
+      return;
+    }
+
+    let confirmed = false;
+    if (Platform.OS === 'web') {
+      confirmed = window.confirm(
+        'Reset current match? All unsaved progress will be lost.'
+      );
+    } else {
+      confirmed = await new Promise((resolve) => {
+        Alert.alert(
+          'Reset Current Match',
+          'Resetting will clear all progress for the ongoing match. Continue?',
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Reset', style: 'destructive', onPress: () => resolve(true) },
+          ]
+        );
+      });
+    }
+
+    if (!confirmed) {
+      return;
+    }
+
+    await clearMatchState();
+    console.log('✅ Match state reset by user');
+  };
+
   const handleMatchHistoryPress = () => {
     setShowMatchHistory(true);
   };
@@ -456,12 +794,23 @@ const HomeScreen: React.FC = () => {
   };
 
   const handleStartMatchPress = () => {
+    if (selectedMatchId || sessionMatchId) {
+      console.log('🔁 Continue Match pressed - resuming LiveScoring');
+      handleLiveScoringPress();
+      return;
+    }
     console.log('🏏 Start Match pressed - showing StartMatchScreen');
     setShowStartMatch(true);
   };
 
   const handleStartMatchBack = () => {
     setShowStartMatch(false);
+    setShowToss(false);
+    setShowOverSelection(false);
+    setSelectedTeams(null);
+    setSelectedPlayingXI(null);
+    setMatchSetupData(null);
+    setSelectedOvers(20);
   };
 
   const handleTeamSelectionBack = () => {
@@ -649,18 +998,168 @@ const HomeScreen: React.FC = () => {
     setShowSideDrawer(false);
   };
 
-  const handleStartMatchNext = async (teamA: string, teamB: string) => {
+  const handleAboutUsPress = () => {
+    console.log('ℹ️ About Us pressed - opening screen');
+    pushToStack('sideDrawer');
+    setShowAboutUs(true);
+    setShowSideDrawer(false);
+  };
+
+  const handleAboutUsBack = () => {
+    setShowAboutUs(false);
+    // Get the previous screen from navigation stack
+    const previousScreen = getPreviousScreen();
+    popFromStack();
+    
+    // Navigate back to the previous screen
+    if (previousScreen === 'sideDrawer') {
+      setShowSideDrawer(true);
+    } else if (previousScreen === 'home') {
+      console.log('🏠 Returning to home screen');
+    }
+  };
+
+  const waitFor = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const resetAutoMatchFlow = (nextStep: AutoMatchStep = 'idle') => {
+    setIsAutoMatchRunning(false);
+    setAutoMatchStep(nextStep);
+    setAutoSimulationRequested(false);
+  };
+
+  const runAutoMatchFlow = async () => {
+    if (isAutoMatchRunning) {
+      return;
+    }
+
+    const oversForDemo = 20;
+    let payload;
+    try {
+      setSelectedOvers(oversForDemo);
+      payload = await fetchAutoMatchTeams();
+    } catch (error) {
+      console.error('❌ Failed to prepare auto match teams:', error);
+      setAutoMatchStatus('Unable to load teams for automation.');
+      resetAutoMatchFlow('idle');
+      return;
+    }
+
+    const { teamA, teamB, battingOrder, bowlingOrder, teamAPlayers, teamBPlayers } = payload;
+
+    try {
+      setIsAutoMatchRunning(true);
+      setAutoMatchStatus('Opening Start Match flow...');
+      setAutoMatchStep('teamSelection');
+
+      handleStartMatchPress();
+      await waitFor(1500);
+
+      setAutoMatchStatus(`Selecting teams: ${teamA.name} vs ${teamB.name}`);
+      await handleStartMatchNext(teamA, teamB);
+      setAutoMatchStep('toss');
+
+      await waitFor(2000);
+      setAutoMatchStatus(`${teamA.name} win the toss and choose to bat first`);
+      handleTossComplete(teamA.name, 'Batting');
+      setAutoMatchStep('overSelection');
+
+      await waitFor(1500);
+      setAutoMatchStatus(`Setting total overs to ${oversForDemo}`);
+      handleOverSelectionConfirm(oversForDemo);
+      setAutoMatchStep('playingXI');
+
+      await waitFor(2000);
+      setAutoMatchStatus('Confirming Playing XI');
+      handlePlaying11Complete({
+        teamA: teamAPlayers.slice(0, 11),
+        teamB: teamBPlayers.slice(0, 11),
+      });
+      setAutoMatchStep('matchSetup');
+
+      await waitFor(2000);
+      setAutoMatchStatus('Configuring match setup');
+      await handleMatchSetupComplete({
+        battingOrder,
+        bowlingOrder,
+        teamAPlayers,
+        teamBPlayers,
+      });
+
+      setAutoMatchStatus(`Simulating ${oversForDemo}-over match...`);
+      setAutoMatchStep('simulate');
+      setAutoSimulationRequested(true);
+    } catch (error) {
+      console.error('❌ Automated flow failed', error);
+      setAutoMatchStatus('Automation failed. Please try again.');
+      resetAutoMatchFlow('idle');
+    }
+  };
+
+  const handleAutoMatchPress = () => {
+    if (!isAutoMatchRunning) {
+      runAutoMatchFlow();
+    }
+  };
+
+  const handleSimulationProgress = (message: string) => {
+    setAutoMatchStatus(message);
+  };
+
+  const handleSimulationComplete = (summary?: MatchSummary) => {
+    if (summary) {
+      const newSlide = {
+        status: 'COMPLETED',
+        overs: summary.overs,
+        team1: { name: summary.teamAName, score: summary.teamAScore },
+        team2: { name: summary.teamBName, score: '—' },
+        batsman: summary.topBatsman
+          ? `${summary.topBatsman.name} ${summary.topBatsman.runs} (${summary.topBatsman.balls})`
+          : '',
+        bowler: summary.topBowler
+          ? `${summary.topBowler.name} ${summary.topBowler.wickets}/${summary.topBowler.runs}`
+          : '',
+        commentary: summary.resultText,
+        venue: 'Auto Simulation',
+        time: new Date(summary.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setRecentMatches(prev => {
+        const withoutUserSlide = prev.slice(1);
+        const updated = [newSlide, ...withoutUserSlide];
+        const limited = updated.slice(0, staticMatchSlides.length);
+        return [getUserTeamMatch(), ...limited];
+      });
+
+      setAutoMatchStatus(
+        `Match simulation complete! ${summary.teamAName} scored ${summary.teamAScore} in ${summary.overs} overs.`
+      );
+    } else {
+      setAutoMatchStatus('Match simulation complete! Opening match history...');
+    }
+
+    setShowMatchHistory(true);
+    pushToStack('sideDrawer');
+    resetAutoMatchFlow('complete');
+  };
+
+  const handleStartMatchNext = async (teamA: LiveTeam, teamB: LiveTeam) => {
     // Create ONE match ID for the entire session
     const newMatchId = `match-${Date.now()}`;
     setSelectedMatchId(newMatchId);
     setSessionMatchId(newMatchId);
     console.log('🏏 Created session match ID:', newMatchId);
-    setMatchTeams({ teamA, teamB });
+    setSelectedTeams({ teamA, teamB });
     
     // Save match state to localStorage
     try {
       await AsyncStorage.setItem('currentMatchId', newMatchId);
-      await AsyncStorage.setItem('currentMatchTeams', JSON.stringify({ teamA, teamB }));
+      await AsyncStorage.setItem(
+        'currentMatchTeams',
+        JSON.stringify({
+          teamA: sanitizeForFirestore(teamA),
+          teamB: sanitizeForFirestore(teamB),
+        })
+      );
       console.log('💾 Saved match state to localStorage');
     } catch (error) {
       console.error('Error saving match state:', error);
@@ -673,17 +1172,44 @@ const HomeScreen: React.FC = () => {
   const handleTossComplete = (winner: string, decision: string) => {
     setTossResult({ winner, decision });
     setShowToss(false);
-    setShowPlaying11(true);
+    setShowOverSelection(true);
+    AsyncStorage.setItem(
+      'currentTossResult',
+      JSON.stringify({ winner, decision })
+    ).catch((error) => console.warn('⚠️ Failed to persist toss result', error));
   };
 
-  const handlePlaying11Complete = () => {
+  const handleOverSelectionConfirm = (overs: number) => {
+    setSelectedOvers(overs);
+    setShowOverSelection(false);
+    setShowPlaying11(true);
+    AsyncStorage.setItem('currentMatchOvers', String(overs)).catch((error) =>
+      console.warn('⚠️ Failed to persist overs selection', error)
+    );
+  };
+
+  const handleOverSelectionBack = () => {
+    setShowOverSelection(false);
+    setShowToss(true);
+  };
+
+  const handlePlaying11Complete = (lineups: { teamA: LivePlayer[]; teamB: LivePlayer[] }) => {
+    setSelectedPlayingXI(lineups);
     setShowPlaying11(false);
     setShowMatchSetup(true);
+    AsyncStorage.setItem(
+      'currentPlayingXI',
+      JSON.stringify({
+        teamA: sanitizeForFirestore(lineups.teamA),
+        teamB: sanitizeForFirestore(lineups.teamB),
+      })
+    ).catch((error) => console.warn('⚠️ Failed to persist playing XI', error));
   };
 
   const handlePlaying11Back = () => {
+    setSelectedPlayingXI(null);
     setShowPlaying11(false);
-    setShowToss(true);
+    setShowOverSelection(true);
   };
 
   const handleMatchSetupComplete = async (setupData: {
@@ -692,31 +1218,140 @@ const HomeScreen: React.FC = () => {
     teamAPlayers: any[];
     teamBPlayers: any[];
   }) => {
+    const orderedTeamAPlayers = [
+      ...setupData.battingOrder
+        .map((id) => setupData.teamAPlayers.find((player) => player.id === id))
+        .filter(Boolean),
+      ...setupData.teamAPlayers.filter((player) => !setupData.battingOrder.includes(player.id)),
+    ];
+
+    const orderedTeamBPlayers = [
+      ...setupData.bowlingOrder
+        .map((id) => setupData.teamBPlayers.find((player) => player.id === id))
+        .filter(Boolean),
+      ...setupData.teamBPlayers.filter((player) => !setupData.bowlingOrder.includes(player.id)),
+    ];
+
+    const initialBattingOrder = (setupData.battingOrder && setupData.battingOrder.length
+      ? [...setupData.battingOrder]
+      : orderedTeamAPlayers.map((player) => player.id));
+
+    const initialBowlingOrder = (setupData.bowlingOrder && setupData.bowlingOrder.length
+      ? [...setupData.bowlingOrder]
+      : orderedTeamBPlayers.slice(0, Math.min(6, orderedTeamBPlayers.length)).map((player) => player.id));
+
+    const strikerSource =
+      orderedTeamAPlayers.find((player) => player.id === initialBattingOrder[0]) || orderedTeamAPlayers[0];
+    const nonStrikerSource =
+      orderedTeamAPlayers.find((player) => player.id === initialBattingOrder[1]) ||
+      orderedTeamAPlayers.find((player) => player.id !== strikerSource?.id) ||
+      orderedTeamAPlayers[1] ||
+      strikerSource;
+
+    const remainingBatters = initialBattingOrder.slice(2);
+    const nextBatsmanSource = remainingBatters.length
+      ? orderedTeamAPlayers.find((player) => player.id === remainingBatters[0])
+      : null;
+
+    const primaryBowlerSource =
+      orderedTeamBPlayers.find((player) => player.id === initialBowlingOrder[0]) || orderedTeamBPlayers[0];
+
+    const enrichedSetup = {
+      ...setupData,
+      teamAPlayers: orderedTeamAPlayers,
+      teamBPlayers: orderedTeamBPlayers,
+      battingOrder: initialBattingOrder,
+      bowlingOrder: initialBowlingOrder,
+      remainingBatters,
+    };
+
     // Store the setup data
-    setMatchSetupData(setupData);
+    setMatchSetupData(enrichedSetup);
+    setSelectedPlayingXI({ teamA: orderedTeamAPlayers, teamB: orderedTeamBPlayers });
+    AsyncStorage.setItem(
+      'currentMatchSetup',
+      JSON.stringify(
+        sanitizeForFirestore({
+          battingOrder: enrichedSetup.battingOrder,
+          bowlingOrder: enrichedSetup.bowlingOrder,
+          teamAPlayers: enrichedSetup.teamAPlayers,
+          teamBPlayers: enrichedSetup.teamBPlayers,
+          remainingBatters,
+        })
+      )
+    ).catch((error) => console.warn('⚠️ Failed to persist match setup', error));
     
     // Use the session match ID (should already be set)
     const matchId = selectedMatchId || sessionMatchId;
     console.log('🏏 Using match ID for live scoring:', matchId);
-    console.log('🏏 Match setup data:', setupData);
+    console.log('🏏 Match setup data:', enrichedSetup);
     
     // Create the match in Firebase BEFORE going to live scoring
     try {
       const { liveScoringService } = await import('../services/liveScoringService');
-      const createdMatchId = await liveScoringService.createMatch({
-        name: `${matchTeams?.teamA || 'Team A'} vs ${matchTeams?.teamB || 'Team B'}`,
-        team1: { id: 'team1', name: matchTeams?.teamA || 'Team A', players: setupData.teamAPlayers },
-        team2: { id: 'team2', name: matchTeams?.teamB || 'Team B', players: setupData.teamBPlayers },
+      const matchPayload = {
+        name: `${selectedTeams?.teamA.name || 'Team A'} vs ${selectedTeams?.teamB.name || 'Team B'}`,
+        team1: { id: selectedTeams?.teamA.id || 'team1', name: selectedTeams?.teamA.name || 'Team A', players: orderedTeamAPlayers },
+        team2: { id: selectedTeams?.teamB.id || 'team2', name: selectedTeams?.teamB.name || 'Team B', players: orderedTeamBPlayers },
         matchType: 'T20',
-        totalOvers: 20,
+        totalOvers: selectedOvers,
         currentInnings: 1,
         status: 'live',
         createdBy: 'user',
         isLive: true,
-      });
+        battingOrder: initialBattingOrder,
+        bowlingOrder: initialBowlingOrder,
+        remainingBatters,
+        currentBatsmen: {
+          striker: {
+            id: strikerSource?.id || 'striker',
+            name: strikerSource?.name || 'Striker',
+            runs: 0,
+            balls: 0,
+            fours: 0,
+            sixes: 0,
+            isOut: false,
+          },
+          nonStriker: {
+            id: nonStrikerSource?.id || 'non-striker',
+            name: nonStrikerSource?.name || 'Non Striker',
+            runs: 0,
+            balls: 0,
+            fours: 0,
+            sixes: 0,
+            isOut: false,
+          },
+        },
+        nextBatsman: {
+          id: nextBatsmanSource?.id || '',
+          name: nextBatsmanSource?.name || (remainingBatters.length ? 'Next Batsman' : 'All Out'),
+        },
+        currentBowler: {
+          id: primaryBowlerSource?.id || 'bowler',
+          name: primaryBowlerSource?.name || 'Bowler',
+          overs: 0,
+          wickets: 0,
+          runs: 0,
+        },
+      };
+
+      const sanitizedPayload = sanitizeForFirestore(matchPayload);
+
+      const createdMatchId = await liveScoringService.createMatch(sanitizedPayload);
       console.log('✅ Match created in Firebase with ID:', createdMatchId);
       // Update the selectedMatchId with the actual Firebase ID
       setSelectedMatchId(createdMatchId);
+      setSessionMatchId(createdMatchId);
+      await AsyncStorage.setItem('currentMatchId', createdMatchId);
+      await AsyncStorage.setItem(
+        'currentMatchTeams',
+        JSON.stringify(
+          sanitizeForFirestore({
+            teamA: selectedTeams?.teamA,
+            teamB: selectedTeams?.teamB,
+          })
+        )
+      );
     } catch (error) {
       console.error('❌ Error creating match:', error);
     }
@@ -728,6 +1363,7 @@ const HomeScreen: React.FC = () => {
   const handleMatchSetupBack = () => {
     setShowMatchSetup(false);
     setShowPlaying11(true);
+    setMatchSetupData(null);
   };
 
   const handleSpectatorPress = () => {
@@ -852,27 +1488,11 @@ const HomeScreen: React.FC = () => {
     console.log('✅ User confirmed finish!');
     
     // Save matchId before clearing state
-    const matchIdToFinish = selectedMatchId;
+    const matchIdToFinish = selectedMatchId || sessionMatchId;
     console.log('📝 Match ID to finish:', matchIdToFinish);
     
     // Clear state FIRST - this makes buttons disappear immediately
-    console.log('🧹 Clearing state...');
-    setSelectedMatchId(null);
-    setSessionMatchId(null);
-    setMatchTeams(null);
-    setTossResult(null);
-    console.log('✅ State cleared - buttons should disappear now!');
-    
-    // Clear match state from localStorage first
-    try {
-      console.log('🗑️ Clearing localStorage...');
-      await AsyncStorage.removeItem('currentMatchId');
-      await AsyncStorage.removeItem('currentMatchTeams');
-      await AsyncStorage.removeItem('currentTossResult');
-      console.log('✅ localStorage cleared!');
-    } catch (error) {
-      console.error('❌ Error clearing localStorage:', error);
-    }
+    await clearMatchState();
     
     // Try to update Firebase (don't block if it fails)
     if (matchIdToFinish) {
@@ -1062,12 +1682,26 @@ const HomeScreen: React.FC = () => {
   }
 
   if (showToss) {
+    if (!selectedTeams) {
+      console.warn('⚠️ Toss requested without selected teams');
+      return null;
+    }
     return (
       <TossScreen
         onBack={handleTossBack}
-        teamA={matchTeams?.teamA || 'Team A'}
-        teamB={matchTeams?.teamB || 'Team B'}
+        teamA={selectedTeams.teamA.name}
+        teamB={selectedTeams.teamB.name}
         onTossComplete={handleTossComplete}
+      />
+    );
+  }
+
+  if (showOverSelection) {
+    return (
+      <OverSelectionScreen
+        onBack={handleOverSelectionBack}
+        onSelect={handleOverSelectionConfirm}
+        selectedOvers={selectedOvers}
       />
     );
   }
@@ -1083,10 +1717,16 @@ const HomeScreen: React.FC = () => {
   }
 
   if (showPlaying11) {
+    if (!selectedTeams) {
+      console.warn('⚠️ Playing XI requested without selected teams');
+      return null;
+    }
     return (
       <Playing11Screen
-        teamA={matchTeams?.teamA || 'Team A'}
-        teamB={matchTeams?.teamB || 'Team B'}
+        teamAName={selectedTeams.teamA.name}
+        teamBName={selectedTeams.teamB.name}
+        teamAPlayers={selectedTeams.teamA.players || []}
+        teamBPlayers={selectedTeams.teamB.players || []}
         tossWinner={tossResult?.winner || 'Team A'}
         tossDecision={tossResult?.decision || 'Batting'}
         onBack={handlePlaying11Back}
@@ -1096,12 +1736,19 @@ const HomeScreen: React.FC = () => {
   }
 
   if (showMatchSetup) {
+    if (!selectedTeams || !selectedPlayingXI) {
+      console.warn('⚠️ Match setup requested without selected teams or playing XI');
+      return null;
+    }
     return (
       <MatchSetupScreen
-        teamA={matchTeams?.teamA || 'Team A'}
-        teamB={matchTeams?.teamB || 'Team B'}
+        teamA={selectedTeams.teamA.name}
+        teamB={selectedTeams.teamB.name}
         tossWinner={tossResult?.winner || 'Team A'}
         tossDecision={tossResult?.decision || 'Batting'}
+        teamAPlayers={selectedPlayingXI.teamA}
+        teamBPlayers={selectedPlayingXI.teamB}
+        totalOvers={selectedOvers}
         onBack={handleMatchSetupBack}
         onStartMatch={handleMatchSetupComplete}
       />
@@ -1132,12 +1779,23 @@ const HomeScreen: React.FC = () => {
   }
 
   if (showLiveScoring) {
+    if (!selectedTeams) {
+      console.warn('⚠️ Live scoring requested without selected teams');
+    }
     return (
       <LiveScoringScreen
         onBack={handleLiveScoringBack}
         matchId={selectedMatchId || undefined}
-        teamA={matchTeams?.teamA}
-        teamB={matchTeams?.teamB}
+        teamA={selectedTeams?.teamA.name}
+        teamB={selectedTeams?.teamB.name}
+        battingOrder={matchSetupData?.battingOrder}
+        bowlingOrder={matchSetupData?.bowlingOrder}
+        teamAPlayers={matchSetupData?.teamAPlayers}
+        teamBPlayers={matchSetupData?.teamBPlayers}
+        totalOvers={selectedOvers}
+        autoSimulate={autoSimulationRequested && isAutoMatchRunning}
+        onSimulationProgress={handleSimulationProgress}
+        onSimulationComplete={handleSimulationComplete}
       />
     );
   }
@@ -1276,6 +1934,15 @@ const HomeScreen: React.FC = () => {
     return (
       <PrivacyPolicyScreen
         onBack={handlePrivacyPolicyBack}
+      />
+    );
+  }
+
+  // Show About Us Screen
+  if (showAboutUs) {
+    return (
+      <AboutUsScreen
+        onBack={handleAboutUsBack}
       />
     );
   }
@@ -1507,10 +2174,21 @@ const HomeScreen: React.FC = () => {
         <View style={styles.startMatchContainer}>
           <TouchableOpacity 
             style={styles.startMatchButton}
-            onPress={handleStartMatchPress}
+            onPress={hasActiveMatch ? handleLiveScoringPress : handleStartMatchPress}
           >
-            <Text style={styles.startMatchButtonText}>🏏 Start Match</Text>
+            <Text style={styles.startMatchButtonText}>
+              {hasActiveMatch ? '🏏 Continue Match' : '🏏 Start Match'}
+            </Text>
           </TouchableOpacity>
+
+          {hasActiveMatch && (
+            <TouchableOpacity
+              style={[styles.startMatchButton, styles.resetMatchButton]}
+              onPress={handleResetMatch}
+            >
+              <Text style={styles.startMatchButtonText}>🔄 Reset Current Match</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Debug: Enhanced Features Button */}
           <TouchableOpacity
@@ -1519,6 +2197,26 @@ const HomeScreen: React.FC = () => {
           >
             <Text style={styles.startMatchButtonText}>🎯 Test PRO Features</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.startMatchButton,
+              { backgroundColor: COLORS.secondary, marginTop: 10 },
+              isAutoMatchRunning && styles.disabledAutoButton
+            ]}
+            onPress={handleAutoMatchPress}
+            disabled={isAutoMatchRunning}
+          >
+            <Text style={styles.startMatchButtonText}>
+              {isAutoMatchRunning ? '⏳ Auto Match Running...' : '🤖 Auto 20-Over Demo'}
+            </Text>
+          </TouchableOpacity>
+
+          {!!autoMatchStatus && (
+            <View style={styles.autoMatchStatus}>
+              <Text style={styles.autoMatchStatusText}>{autoMatchStatus}</Text>
+            </View>
+          )}
         </View>
 
         {/* MATCH SLIDES SHOWCASE */}
@@ -1530,7 +2228,7 @@ const HomeScreen: React.FC = () => {
             style={styles.matchSlides}
             pagingEnabled
           >
-            {matchSlides.map((match, index) => (
+            {recentMatches.map((match, index) => (
               <TouchableOpacity 
                 key={index} 
                 style={[
@@ -1626,6 +2324,7 @@ const HomeScreen: React.FC = () => {
         onRateUsPress={handleRateUsPress}
         onSuperAdminPress={handleSuperAdminPress}
         onPrivacyPolicyPress={handlePrivacyPolicyPress}
+        onAboutUsPress={handleAboutUsPress}
       />
     </SafeAreaView>
   );
@@ -1915,11 +2614,32 @@ const styles = StyleSheet.create({
     borderRadius: SIZES.radius,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: SIZES.xs,
+  },
+  resetMatchButton: {
+    backgroundColor: COLORS.error,
   },
   startMatchButtonText: {
     color: COLORS.white,
     fontSize: 12,
     fontFamily: FONTS.medium,
+  },
+  disabledAutoButton: {
+    opacity: 0.6,
+  },
+  autoMatchStatus: {
+    marginTop: SIZES.sm,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: SIZES.radius,
+    paddingHorizontal: SIZES.md,
+    paddingVertical: SIZES.sm,
+  },
+  autoMatchStatusText: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.text,
   },
   // User Team Slide Styles
   userTeamSlide: {

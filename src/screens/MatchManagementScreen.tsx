@@ -82,14 +82,14 @@ const MatchManagementScreen: React.FC<MatchManagementScreenProps> = ({
         }
 
         // Create sample teams
-        await liveScoringService.createTeam({
+        await liveScoringService.createBasicTeam({
           name: 'Team India',
           players: playerIds.slice(0, 3).map(id => ({ id, name: '', role: 'batsman' as const })),
           captain: playerIds[0],
           wicketKeeper: playerIds[2],
         });
 
-        await liveScoringService.createTeam({
+        await liveScoringService.createBasicTeam({
           name: 'Team Australia',
           players: playerIds.slice(2, 5).map(id => ({ id, name: '', role: 'batsman' as const })),
           captain: playerIds[2],
@@ -115,7 +115,12 @@ const MatchManagementScreen: React.FC<MatchManagementScreenProps> = ({
       ]);
       
       setMatches(matchesData);
-      setTeams(teamsData);
+      setTeams(
+        teamsData.map((team) => ({
+          ...team,
+          players: Array.isArray(team.players) ? team.players : [],
+        }))
+      );
       setPlayers(playersData);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -200,7 +205,7 @@ const MatchManagementScreen: React.FC<MatchManagementScreenProps> = ({
         wicketKeeper: newTeam.wicketKeeper,
       };
 
-      await liveScoringService.createTeam(teamData);
+      await liveScoringService.createBasicTeam(teamData);
       Alert.alert('Success', 'Team created successfully!');
       setShowCreateTeam(false);
       setNewTeam({
@@ -406,12 +411,15 @@ const MatchManagementScreen: React.FC<MatchManagementScreenProps> = ({
             </View>
           ) : (
             <View style={styles.teamsList}>
-              {teams.map((team) => (
+              {teams.map((team) => {
+                const playerCount = Array.isArray(team.players) ? team.players.length : 0;
+                return (
                 <View key={team.id} style={styles.teamCard}>
                   <Text style={styles.teamName}>{team.name}</Text>
-                  <Text style={styles.teamPlayers}>{team.players.length} players</Text>
+                  <Text style={styles.teamPlayers}>{playerCount} players</Text>
                 </View>
-              ))}
+                );
+              })}
             </View>
           )}
         </View>

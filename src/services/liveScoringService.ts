@@ -30,14 +30,66 @@ export interface Match {
   updatedAt: Timestamp;
   createdBy: string;
   isLive: boolean;
+  battingOrder?: string[];
+  bowlingOrder?: string[];
+  totalRuns?: number;
+  wickets?: number;
+  currentOver?: number;
+  currentBall?: number;
+  currentBatsmen?: {
+    striker?: {
+      id?: string;
+      name?: string;
+      runs?: number;
+      balls?: number;
+      fours?: number;
+      sixes?: number;
+      isOut?: boolean;
+    };
+    nonStriker?: {
+      id?: string;
+      name?: string;
+      runs?: number;
+      balls?: number;
+      fours?: number;
+      sixes?: number;
+      isOut?: boolean;
+    };
+  };
+  currentBowler?: {
+    id?: string;
+    name?: string;
+    overs?: number;
+    wickets?: number;
+    runs?: number;
+  };
+  nextBatsman?: {
+    id?: string;
+    name?: string;
+  };
+  remainingBatters?: string[];
+  pendingFreeHit?: boolean;
+  team1PlayersOriginal?: Player[];
+  team2PlayersOriginal?: Player[];
+  battingTeamName?: string;
+  bowlingTeamName?: string;
+  inningsHistory?: any[];
+  targetScore?: number;
+  matchResult?: string;
+  isMatchCompleted?: boolean;
 }
 
 export interface Team {
   id: string;
   name: string;
+  shortName?: string;
+  city?: string;
+  logo?: string;
+  slug?: string;
   players: Player[];
   captain?: string;
   wicketKeeper?: string;
+  coach?: string;
 }
 
 export interface Player {
@@ -46,6 +98,13 @@ export interface Player {
   role: 'batsman' | 'bowler' | 'all-rounder' | 'wicket-keeper';
   battingOrder?: number;
   bowlingOrder?: number;
+  shortName?: string;
+  battingStyle?: string;
+  bowlingStyle?: string;
+  nationality?: string;
+  jerseyNumber?: number;
+  isCaptain?: boolean;
+  isWicketKeeper?: boolean;
 }
 
 export interface Innings {
@@ -73,11 +132,20 @@ export interface BallData {
   runs: number;
   isWicket: boolean;
   wicketType?: string;
+  dismissalFielderId?: string;
+  dismissalFielderName?: string;
   isExtra: boolean;
   extraType?: string;
   batsmanId: string;
   bowlerId: string;
   timestamp: Timestamp;
+  batsmanRuns?: number;
+  extraRuns?: number;
+  extraSubType?: string;
+  legalDelivery?: boolean;
+  awardedFreeHit?: boolean;
+  wasFreeHit?: boolean;
+  innings?: number;
 }
 
 export interface MatchStats {
@@ -507,7 +575,7 @@ class LiveScoringService {
   }
 
   // Team Management Functions
-  async createTeam(teamData: { name: string; shortName: string; city: string; createdBy: string }): Promise<string> {
+  async createBasicTeam(teamData: { name: string; shortName: string; city: string; createdBy: string }): Promise<string> {
     try {
       const teamRef = await addDoc(collection(db, 'teams'), {
         ...teamData,
