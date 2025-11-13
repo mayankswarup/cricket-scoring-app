@@ -8,26 +8,31 @@ import {
   Alert,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { COLORS, SIZES, FONTS } from '../constants';
 import { liveScoringService, Team, Player } from '../services/liveScoringService';
 import { initializeDemoData, MANUAL_TEST_TEAMS } from '../utils/demoData';
+import VenueSelector, { Venue } from '../components/VenueSelector';
 // import { UI_CONFIG } from '../config/appConfig';
 
 interface StartMatchScreenProps {
   onBack: () => void;
-  onNext: (teamA: Team, teamB: Team) => void;
+  onNext: (teamA: Team, teamB: Team, venue?: Venue | string) => void;
   onCreateTeam?: () => void;
 }
 
 const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onCreateTeam }) => {
   const [selectedTeamA, setSelectedTeamA] = useState<Team | null>(null);
   const [selectedTeamB, setSelectedTeamB] = useState<Team | null>(null);
+  const [selectedVenue, setSelectedVenue] = useState<Venue | string | null>(null);
+  const [venueSelectorKey, setVenueSelectorKey] = useState(0); // Key to reset VenueSelector
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [selectingFor, setSelectingFor] = useState<'A' | 'B'>('A');
   const [searchQuery, setSearchQuery] = useState('');
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isStartingMatch, setIsStartingMatch] = useState(false);
 
   // Load teams from Firebase and combine with real cricket teams
   useEffect(() => {
@@ -41,9 +46,19 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
       let firebaseTeams = await liveScoringService.getAllTeams();
 
       if (!firebaseTeams.length) {
-        console.log('⚠️ No teams found in Firestore. Seeding demo data...');
-        await initializeDemoData();
-        firebaseTeams = await liveScoringService.getAllTeams();
+        console.log('📦 No teams found in Firestore. Seeding demo data...');
+        try {
+          await initializeDemoData();
+          // Wait a bit for Firestore to propagate the changes
+          await new Promise(resolve => setTimeout(resolve, 500));
+          firebaseTeams = await liveScoringService.getAllTeams();
+          console.log(`✅ Loaded ${firebaseTeams.length} teams from Firestore after seeding`);
+        } catch (seedError) {
+          console.error('❌ Error seeding demo data:', seedError);
+          // Continue with fallback
+        }
+      } else {
+        console.log(`✅ Loaded ${firebaseTeams.length} teams from Firestore`);
       }
 
       let sanitizedTeams: Team[] = firebaseTeams
@@ -72,7 +87,8 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
         .filter((team) => team.players && team.players.length >= 11);
 
       if (!sanitizedTeams.length) {
-        console.log('⚠️ Firestore still empty after seeding. Falling back to manual teams.');
+        // Only log once, not as a warning - this is normal fallback behavior
+        console.log('ℹ️ Using fallback teams (Firestore teams have less than 11 players or seeding needs time to propagate)');
         const manualFallback: Team[] = MANUAL_TEST_TEAMS.map((team) => ({
           id: team.id,
           name: team.name,
@@ -137,7 +153,7 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
     setSearchQuery('');
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!selectedTeamA || !selectedTeamB) {
       Alert.alert('Error', 'Please select both teams');
       return;
@@ -153,7 +169,16 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
       return;
     }
     
-    onNext(selectedTeamA, selectedTeamB);
+    setIsStartingMatch(true);
+    try {
+      // Small delay to show spinner
+      await new Promise(resolve => setTimeout(resolve, 100));
+      onNext(selectedTeamA, selectedTeamB, selectedVenue || undefined);
+    } catch (error) {
+      console.error('Error starting match:', error);
+      Alert.alert('Error', 'Failed to start match. Please try again.');
+      setIsStartingMatch(false);
+    }
   };
 
   return (
@@ -164,8 +189,16 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Start A Match</Text>
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-          <Text style={styles.nextButtonText}>▶</Text>
+        <TouchableOpacity 
+          style={[styles.nextButton, isStartingMatch && styles.nextButtonDisabled]} 
+          onPress={handleNext}
+          disabled={isStartingMatch}
+        >
+          {isStartingMatch ? (
+            <ActivityIndicator size="small" color={COLORS.white} />
+          ) : (
+            <Text style={styles.nextButtonText}>▶</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -176,6 +209,50 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
           </View>
         ) : (
           <>
+            {/* Venue Selection - Before Team Selection */}
+            <View style={styles.section}>
+              <VenueSelector
+                key={venueSelectorKey} // Reset component when key changes
+                value={typeof selectedVenue === 'string' ? selectedVenue : selectedVenue?.name || ''}
+                onSelect={(venue) => {
+                  // Replace existing selection with new one
+                  setSelectedVenue(venue);
+                }}
+                label="Match Venue"
+                placeholder="Search for a venue (e.g., Spartan, Cowel)"
+                required={false}
+                disabled={false} // Will be disabled once match starts
+              />
+              
+              {/* Display Selected Venue - Always show below input */}
+              {selectedVenue && (
+                <View style={styles.selectedVenueDisplay}>
+                  <Text style={styles.selectedVenueLabel}>Selected Venue:</Text>
+                  <View style={styles.selectedVenueCard}>
+                    <Text style={styles.selectedVenueName}>
+                      {typeof selectedVenue === 'string' ? selectedVenue : selectedVenue.name}
+                    </Text>
+                    {typeof selectedVenue !== 'string' && selectedVenue.area && (
+                      <Text style={styles.selectedVenueArea}>
+                        📍 {selectedVenue.area}, {selectedVenue.city || 'Bengaluru'}
+                        {selectedVenue.type && ` • ${selectedVenue.type === 'paid' ? 'Paid' : selectedVenue.type === 'free' ? 'Free' : 'Mixed'}`}
+                      </Text>
+                    )}
+                    <TouchableOpacity
+                      style={styles.removeVenueButton}
+                      onPress={() => {
+                        setSelectedVenue(null);
+                        // Reset VenueSelector component to clear its internal state
+                        setVenueSelectorKey(prev => prev + 1);
+                      }}
+                    >
+                      <Text style={styles.removeVenueText}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+
             {/* Team A Selection */}
             <View style={styles.teamSection}>
           <View style={styles.teamIcon}>
@@ -338,6 +415,17 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
           </>
         )}
       </ScrollView>
+
+      {/* Loading Overlay */}
+      {isStartingMatch && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingContent}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.matchStartLoadingText}>Starting match...</Text>
+            <Text style={styles.matchStartLoadingSubtext}>Please wait</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -376,9 +464,47 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontFamily: FONTS.bold,
   },
+  nextButtonDisabled: {
+    opacity: 0.6,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: SIZES.xl,
+    alignItems: 'center',
+    minWidth: 200,
+  },
+  matchStartLoadingText: {
+    marginTop: SIZES.md,
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+  },
+  matchStartLoadingSubtext: {
+    marginTop: SIZES.xs,
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray,
+  },
   content: {
     flex: 1,
     paddingHorizontal: SIZES.lg,
+  },
+  section: {
+    paddingHorizontal: SIZES.lg,
+    paddingVertical: SIZES.md,
+    marginBottom: SIZES.md,
   },
   teamSection: {
     alignItems: 'center',
@@ -397,6 +523,43 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: COLORS.white,
     fontFamily: FONTS.bold,
+  },
+  selectedVenueDisplay: {
+    marginTop: SIZES.md,
+  },
+  selectedVenueLabel: {
+    fontSize: 14,
+    fontFamily: FONTS.medium,
+    color: COLORS.text,
+    marginBottom: SIZES.xs,
+  },
+  selectedVenueCard: {
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 12,
+    padding: SIZES.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  selectedVenueName: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+    marginBottom: SIZES.xs,
+  },
+  selectedVenueArea: {
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray,
+    marginBottom: SIZES.xs,
+  },
+  removeVenueButton: {
+    alignSelf: 'flex-start',
+    marginTop: SIZES.xs,
+  },
+  removeVenueText: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.error,
   },
   selectButton: {
     backgroundColor: '#28a745',

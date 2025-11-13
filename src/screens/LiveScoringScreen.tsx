@@ -64,6 +64,7 @@ export interface MatchSummary {
   teamAName: string;
   teamBName: string;
   teamAScore: string;
+  teamBScore?: string; // Add team2 score
   overs: string;
   topBatsman?: {
     name: string;
@@ -77,6 +78,7 @@ export interface MatchSummary {
   };
   resultText: string;
   timestamp: string;
+  matchId?: string; // Add match ID for deduplication
 }
 
 interface LiveScoringScreenProps {
@@ -208,7 +210,7 @@ type ScorecardBowling = {
   economy: number;
 };
 
-type ScorecardData = {
+export type ScorecardData = {
   battingStats: ScorecardBatting[];
   bowlingStats: ScorecardBowling[];
   fallOfWickets: { wicket: number; batsman: string; score: number; over: string }[];
@@ -229,7 +231,7 @@ const logVerbose = (...args: any[]) => {
   }
 };
 
-const buildScorecardData = (data: MatchData): ScorecardData => {
+export const buildScorecardData = (data: MatchData): ScorecardData => {
   const battingMap = new Map<string, ScorecardBatting>();
   const bowlingMap = new Map<string, ScorecardBowling & { balls: number }>();
 
@@ -548,10 +550,34 @@ const buildMatchSummaryFromData = (data: MatchData): MatchSummary => {
     return a.runs - b.runs;
   })[0];
 
+  // Calculate team scores from innings history if available
+  let teamAScore = `${data.totalRuns}/${data.wickets}`;
+  let teamBScore: string | undefined;
+  
+  if (data.inningsHistory && data.inningsHistory.length > 0) {
+    // Get first innings (team1 batting)
+    const firstInnings = data.inningsHistory[0];
+    teamAScore = `${firstInnings.totalRuns || data.totalRuns}/${firstInnings.wickets || data.wickets}`;
+    
+    // Get second innings (team2 batting) if exists
+    if (data.inningsHistory.length > 1) {
+      const secondInnings = data.inningsHistory[1];
+      teamBScore = `${secondInnings.totalRuns || 0}/${secondInnings.wickets || 0}`;
+    }
+  }
+
+  // Build result text
+  let resultText = `${data.team1} posted ${teamAScore}`;
+  if (teamBScore) {
+    resultText += `, ${data.team2} ${teamBScore}`;
+  }
+  resultText += ` in ${data.currentOver}.${data.currentBall} overs`;
+
   return {
     teamAName: data.team1,
     teamBName: data.team2,
-    teamAScore: `${data.totalRuns}/${data.wickets}`,
+    teamAScore,
+    teamBScore,
     overs: `${data.currentOver}.${data.currentBall}`,
     topBatsman: topBatsman
       ? { name: topBatsman.name, runs: topBatsman.runs, balls: topBatsman.balls }
@@ -559,8 +585,9 @@ const buildMatchSummaryFromData = (data: MatchData): MatchSummary => {
     topBowler: topBowler
       ? { name: topBowler.name, wickets: topBowler.wickets, runs: topBowler.runs }
       : undefined,
-    resultText: `${data.team1} posted ${data.totalRuns}/${data.wickets} in ${data.currentOver}.${data.currentBall} overs`,
+    resultText,
     timestamp: new Date().toISOString(),
+    matchId: data.id,
   };
 };
 
@@ -1613,8 +1640,25 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({
       // First try to get the match to see if it exists
       const existingMatch = await liveScoringService.getMatch(matchId);
       
-      const matchStatus = matchData.isMatchCompleted ? 'completed' : 'live';
+      // Explicitly set status to 'completed' if match is completed
+      const matchStatus = matchData.isMatchCompleted ? 'completed' : (matchData.awaitingNextInnings ? 'live' : 'live');
       const isLiveFlag = !matchData.isMatchCompleted && !matchData.awaitingNextInnings;
+      
+      // Log match completion status for debugging
+      if (matchData.isMatchCompleted) {
+        console.log('✅ Saving completed match:', matchId, 'Status:', matchStatus);
+      }
+
+      // Get venue from storage if available
+      let venueName = existingMatch?.venue || 'Cricket Ground';
+      try {
+        const storedVenue = await AsyncStorage.getItem('currentMatchVenue');
+        if (storedVenue) {
+          venueName = storedVenue;
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not retrieve venue from storage:', error);
+      }
 
       const payload = sanitizeForFirestore({
         name: `${matchData.team1} vs ${matchData.team2}`,
@@ -1647,6 +1691,7 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({
         isMatchCompleted: matchData.isMatchCompleted,
         awaitingNextInnings: matchData.awaitingNextInnings,
         pendingInningsSummary: matchData.pendingInningsSummary,
+        venue: venueName, // Ensure venue is always included
         completedAt: matchData.isMatchCompleted ? new Date().toISOString() : undefined,
       });
 
@@ -1781,6 +1826,42 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({
       if (meta.commentaryOverride) {
         commentary = meta.commentaryOverride;
       }
+      
+      // Generate default commentary if none provided
+      if (!commentary || commentary.trim() === '') {
+        const batsmanName = currentMatch.currentBatsmen.striker.name;
+        const bowlerName = currentMatch.currentBowler.name;
+        
+        if (isWicket) {
+          commentary = `${batsmanName} is out! ${bowlerName} takes the wicket.`;
+        } else if (isExtra) {
+          if (extraType === 'Wide') {
+            commentary = `Wide ball from ${bowlerName}. ${runs} run${runs !== 1 ? 's' : ''}.`;
+          } else if (extraType === 'No Ball') {
+            commentary = `No ball from ${bowlerName}. ${runs} run${runs !== 1 ? 's' : ''}.`;
+          } else if (extraType === 'Bye') {
+            commentary = `Bye${runs !== 1 ? 's' : ''}. ${runs} run${runs !== 1 ? 's' : ''}.`;
+          } else if (extraType === 'Leg Bye') {
+            commentary = `Leg bye${runs !== 1 ? 's' : ''}. ${runs} run${runs !== 1 ? 's' : ''}.`;
+          } else {
+            commentary = `${extraType || 'Extra'} from ${bowlerName}. ${runs} run${runs !== 1 ? 's' : ''}.`;
+          }
+        } else if (runs === 0) {
+          commentary = `${batsmanName} defends the ball from ${bowlerName}.`;
+        } else if (runs === 1) {
+          commentary = `${batsmanName} takes a single off ${bowlerName}.`;
+        } else if (runs === 2) {
+          commentary = `${batsmanName} takes two runs off ${bowlerName}.`;
+        } else if (runs === 3) {
+          commentary = `${batsmanName} takes three runs off ${bowlerName}.`;
+        } else if (runs === 4) {
+          commentary = `${batsmanName} hits a boundary off ${bowlerName}!`;
+        } else if (runs === 6) {
+          commentary = `${batsmanName} hits a six off ${bowlerName}!`;
+        } else {
+          commentary = `${batsmanName} scores ${runs} runs off ${bowlerName}.`;
+        }
+      }
 
       // Build ball data object, only including wicketType and extraType if applicable
       const ballData: any = {
@@ -1797,6 +1878,7 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({
         batsmanRuns,
         extraRuns,
         innings: currentMatch.currentInnings,
+        commentary, // Always include commentary
       };
 
       if (extraSubType) {
@@ -1810,17 +1892,21 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({
       }
 
       if (shotDetails?.shotType) {
-        ballData.shotType = shotDetails.shotType;
+        ballData.shotType = Array.isArray(shotDetails.shotType) 
+          ? shotDetails.shotType.join(', ') 
+          : shotDetails.shotType;
       }
       if (shotDetails?.shotRegion) {
-        ballData.shotRegion = shotDetails.shotRegion;
+        ballData.shotRegion = Array.isArray(shotDetails.shotRegion) 
+          ? shotDetails.shotRegion.join(', ') 
+          : shotDetails.shotRegion;
       }
       if (shotDetails?.shotQuality) {
-        ballData.shotQuality = shotDetails.shotQuality;
+        ballData.shotQuality = Array.isArray(shotDetails.shotQuality) 
+          ? shotDetails.shotQuality.join(', ') 
+          : shotDetails.shotQuality;
       }
-      if (commentary) {
-        ballData.commentary = commentary;
-      }
+      // Commentary is already included in ballData above
 
       if (isWicket && wicketType) {
         ballData.wicketType = wicketType;
@@ -1860,9 +1946,15 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({
         extraType: isExtra ? extraType : undefined,
         extraSubType,
         timestamp: Date.now(),
-        shotType: shotDetails?.shotType,
-        shotRegion: shotDetails?.shotRegion,
-        shotQuality: shotDetails?.shotQuality,
+        shotType: shotDetails?.shotType 
+          ? (Array.isArray(shotDetails.shotType) ? shotDetails.shotType.join(', ') : shotDetails.shotType)
+          : undefined,
+        shotRegion: shotDetails?.shotRegion 
+          ? (Array.isArray(shotDetails.shotRegion) ? shotDetails.shotRegion.join(', ') : shotDetails.shotRegion)
+          : undefined,
+        shotQuality: shotDetails?.shotQuality 
+          ? (Array.isArray(shotDetails.shotQuality) ? shotDetails.shotQuality.join(', ') : shotDetails.shotQuality)
+          : undefined,
         commentary,
         batsmanOnStrike: currentMatch.currentBatsmen.striker.name,
         batsmanId: currentMatch.currentBatsmen.striker.id,
@@ -2756,12 +2848,38 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({
     setIsClosingMatch(true);
     try {
       if (matchId) {
+        // Explicitly ensure match is marked as completed before saving
+        const finalMatchData = {
+          ...matchData,
+          isMatchCompleted: true,
+        };
+        
+        // Update local state to ensure saveMatchData uses the correct status
+        matchDataRef.current = finalMatchData;
+        setMatchData(finalMatchData);
+        
+        // Save match data with completed status
         await saveMatchData();
+        
+        // Explicitly update match status in Firebase to ensure it's marked as completed
+        // Note: updateMatch already adds updatedAt with serverTimestamp, so we don't need to add it here
+        await liveScoringService.updateMatch(matchId, sanitizeForFirestore({
+          status: 'completed',
+          isLive: false,
+          isMatchCompleted: true,
+        }));
+        
+        console.log('✅ Match marked as completed and saved:', matchId);
       }
+      
       setShowMatchCompleteOverlay(false);
       setMatchCompletionSummary(null);
       onSimulationComplete?.(buildMatchSummaryFromData(matchDataRef.current));
+      
+      // Small delay to ensure Firebase update completes before navigating
+      setTimeout(() => {
       onBack();
+      }, 500);
     } catch (error) {
       console.error('❌ Failed to close match:', error);
       Alert.alert('Close Match Failed', 'Unable to finalize the match. Please try again.');
@@ -3449,7 +3567,18 @@ const LiveScoringScreen: React.FC<LiveScoringScreenProps> = ({
           currentOver={currentOverSummary}
           recentBalls={recentBallsForCommentary}
           currentBatsman={matchData.currentBatsmen.striker.name}
+          currentBatsmanStats={{
+            runs: matchData.currentBatsmen.striker.runs,
+            balls: matchData.currentBatsmen.striker.balls,
+          }}
           currentBowler={matchData.currentBowler.name}
+          currentBowlerStats={{
+            overs: matchData.currentBowler.overs,
+            wickets: matchData.currentBowler.wickets,
+            runs: matchData.currentBowler.runs,
+          }}
+          bowlerId={matchData.currentBowler.id}
+          allBalls={matchData.balls.map((ball) => decorateBallForDisplay(ball))}
           totalRuns={matchData.totalRuns}
           totalWickets={matchData.wickets}
         />

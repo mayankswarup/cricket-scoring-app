@@ -233,6 +233,186 @@ const HomeScreen: React.FC = () => {
   const buildInitialSlides = () => [getUserTeamMatch(), ...staticMatchSlides];
   const [recentMatches, setRecentMatches] = useState(() => buildInitialSlides());
   
+  // Load completed matches from Firebase
+  useEffect(() => {
+    const loadRecentCompletedMatches = async () => {
+      try {
+        const finishedMatches = await liveScoringService.getFinishedMatches();
+        // Get the most recent 5 matches and calculate scores from balls
+        // Sort by createdAt (most recent first), then by updatedAt if createdAt is same
+        const sortedMatches = finishedMatches.sort((a, b) => {
+          const dateA = a.createdAt?.seconds || 0;
+          const dateB = b.createdAt?.seconds || 0;
+          if (dateB !== dateA) {
+            return dateB - dateA; // Most recent first
+          }
+          // If createdAt is same, sort by updatedAt
+          const updatedA = a.updatedAt?.seconds || 0;
+          const updatedB = b.updatedAt?.seconds || 0;
+          return updatedB - updatedA;
+        }).slice(0, 5);
+
+        const recentCompletedMatches = await Promise.all(
+          sortedMatches.map(async (match) => {
+            try {
+              // Load balls to calculate both team scores
+              const matchBalls = await liveScoringService.getMatchBalls(match.id);
+              
+              // Calculate scores by innings
+              const innings1Balls = matchBalls.filter((ball: any) => (ball.innings || 1) === 1);
+              const innings2Balls = matchBalls.filter((ball: any) => (ball.innings || 2) === 2);
+              
+              // Team 1 score from innings 1
+              const team1Runs = innings1Balls.reduce((sum: number, ball: any) => {
+                if (ball.isExtra) return sum;
+                return sum + (ball.batsmanRuns || ball.runs || 0);
+              }, 0);
+              const team1Wickets = innings1Balls.filter((ball: any) => ball.isWicket).length;
+              const team1Score = `${team1Runs}/${team1Wickets}`;
+              
+              // Team 2 score from innings 2 (if exists)
+              let team2Score = '—';
+              if (innings2Balls.length > 0) {
+                const team2Runs = innings2Balls.reduce((sum: number, ball: any) => {
+                  if (ball.isExtra) return sum;
+                  return sum + (ball.batsmanRuns || ball.runs || 0);
+                }, 0);
+                const team2Wickets = innings2Balls.filter((ball: any) => ball.isWicket).length;
+                team2Score = `${team2Runs}/${team2Wickets}`;
+              }
+              
+              const team1Name = match.team1?.name || 'Team 1';
+              const team2Name = match.team2?.name || 'Team 2';
+              const matchWithScores = match as any;
+              
+              return {
+                matchId: match.id,
+                status: 'COMPLETED',
+                overs: `${match.currentOver || 0}.${match.currentBall || 0}`,
+                team1: { 
+                  name: team1Name, 
+                  score: team1Score 
+                },
+                team2: { 
+                  name: team2Name, 
+                  score: team2Score 
+                },
+                batsman: '',
+                bowler: '',
+                commentary: `${team1Name} vs ${team2Name}`,
+                venue: matchWithScores.venue || 'Cricket Ground',
+                time: match.createdAt?.seconds 
+                  ? new Date(match.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : 'Today',
+                createdAt: match.createdAt, // Preserve for sorting
+                updatedAt: match.updatedAt, // Preserve for sorting
+              };
+            } catch (error) {
+              console.error(`Error loading match ${match.id}:`, error);
+              // Fallback to basic match data
+              const team1Name = match.team1?.name || 'Team 1';
+              const team2Name = match.team2?.name || 'Team 2';
+              const matchWithScores = match as any;
+              return {
+                matchId: match.id,
+                status: 'COMPLETED',
+                overs: `${match.currentOver || 0}.${match.currentBall || 0}`,
+                team1: { 
+                  name: team1Name, 
+                  score: `${match.totalRuns || 0}/${match.wickets || 0}` 
+                },
+                team2: { 
+                  name: team2Name, 
+                  score: '—' 
+                },
+                batsman: '',
+                bowler: '',
+                commentary: `${team1Name} vs ${team2Name}`,
+                venue: matchWithScores.venue || 'Cricket Ground',
+                time: match.createdAt?.seconds 
+                  ? new Date(match.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : 'Today',
+                createdAt: match.createdAt, // Preserve for sorting
+                updatedAt: match.updatedAt, // Preserve for sorting
+              };
+            }
+          })
+        );
+
+        if (recentCompletedMatches.length > 0) {
+          setRecentMatches(prev => {
+            const withoutUserSlide = prev.slice(1);
+            // Deduplicate by matchId - create a map to track unique matches
+            const matchMap = new Map<string, any>();
+            
+            // First, add existing matches (excluding user slide)
+            // Keep static slides without matchId, but deduplicate by matchId for real matches
+            withoutUserSlide.forEach((m: any) => {
+              if (m.matchId) {
+                matchMap.set(m.matchId, m);
+              } else {
+                // Static slides without matchId - use a composite key to avoid duplicates
+                const staticKey = `static-${m.team1?.name || ''}-${m.team2?.name || ''}-${m.time || ''}`;
+                if (!matchMap.has(staticKey)) {
+                  matchMap.set(staticKey, m);
+                }
+              }
+            });
+            
+            // Then add new matches (will overwrite duplicates by matchId)
+            recentCompletedMatches.forEach((m: any) => {
+              if (m.matchId) {
+                matchMap.set(m.matchId, m);
+              }
+            });
+            
+            // Convert map to array, prioritize real matches (with matchId), sort by createdAt/updatedAt (most recent first)
+            const allMatches = Array.from(matchMap.values());
+            const realMatches = allMatches.filter((m: any) => m.matchId).sort((a: any, b: any) => {
+              // Sort by createdAt first (most recent first)
+              const dateA = a.createdAt?.seconds || (a.createdAt ? a.createdAt : 0);
+              const dateB = b.createdAt?.seconds || (b.createdAt ? b.createdAt : 0);
+              
+              if (dateB !== dateA) {
+                return dateB - dateA; // Most recent first
+              }
+              
+              // If createdAt is same, sort by updatedAt
+              const updatedA = a.updatedAt?.seconds || (a.updatedAt ? a.updatedAt : 0);
+              const updatedB = b.updatedAt?.seconds || (b.updatedAt ? b.updatedAt : 0);
+              
+              if (updatedB !== updatedA) {
+                return updatedB - updatedA;
+              }
+              
+              // Fallback: extract timestamp from matchId if available
+              const getTimestampFromId = (match: any) => {
+                if (match.matchId && match.matchId.startsWith('match-')) {
+                  const timestamp = parseInt(match.matchId.replace('match-', ''));
+                  if (!isNaN(timestamp)) return timestamp;
+                }
+                return 0;
+              };
+              
+              return getTimestampFromId(b) - getTimestampFromId(a);
+            });
+            const staticMatches = allMatches.filter((m: any) => !m.matchId);
+            
+            // Combine: real matches first, then static, limit total
+            const combined = [...realMatches, ...staticMatches];
+            const limited = combined.slice(0, staticMatchSlides.length);
+            
+            return [getUserTeamMatch(), ...limited];
+          });
+        }
+      } catch (error) {
+        console.error('Error loading recent completed matches:', error);
+      }
+    };
+
+    loadRecentCompletedMatches();
+  }, []);
+  
   // Player authentication states
   const [currentPlayer, setCurrentPlayer] = useState<PlayerRegistration | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -704,9 +884,32 @@ const HomeScreen: React.FC = () => {
     setShowLiveScoring(true);
   };
 
-  const handleLiveScoringBack = () => {
+  const handleLiveScoringBack = async () => {
     setShowLiveScoring(false);
-    // Don't reset selectedMatchId - keep match state for "Continue Match"
+    
+    // Check if the match is completed and clear match ID if so
+    if (selectedMatchId) {
+      try {
+        const { liveScoringService } = await import('../services/liveScoringService');
+        const match = await liveScoringService.getMatch(selectedMatchId);
+        
+        // If match is completed, clear the match ID so it doesn't show "Continue Match"
+        if (match && (match.status === 'completed' || match.isMatchCompleted === true)) {
+          console.log('✅ Match is completed, clearing match ID');
+          setSelectedMatchId(null);
+          setSessionMatchId(null);
+          // Also clear from AsyncStorage
+          try {
+            await AsyncStorage.multiRemove(MATCH_STORAGE_KEYS);
+          } catch (error) {
+            console.error('❌ Failed to clear match storage:', error);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error checking match status:', error);
+        // Don't clear match ID if we can't check status
+      }
+    }
   };
 
   const handleMatchManagementPress = () => {
@@ -1105,13 +1308,26 @@ const HomeScreen: React.FC = () => {
     setAutoMatchStatus(message);
   };
 
-  const handleSimulationComplete = (summary?: MatchSummary) => {
+  const handleSimulationComplete = async (summary?: MatchSummary) => {
+    // Clear match ID when simulation completes
+    if (selectedMatchId) {
+      console.log('✅ Simulation complete, clearing match ID');
+      setSelectedMatchId(null);
+      setSessionMatchId(null);
+      try {
+        await AsyncStorage.multiRemove(MATCH_STORAGE_KEYS);
+      } catch (error) {
+        console.error('❌ Failed to clear match storage:', error);
+      }
+    }
+    
     if (summary) {
       const newSlide = {
+        matchId: selectedMatchId || `match-${Date.now()}`, // Add match ID for deduplication
         status: 'COMPLETED',
         overs: summary.overs,
         team1: { name: summary.teamAName, score: summary.teamAScore },
-        team2: { name: summary.teamBName, score: '—' },
+        team2: { name: summary.teamBName, score: summary.teamBScore || '—' }, // Show team2 score if available
         batsman: summary.topBatsman
           ? `${summary.topBatsman.name} ${summary.topBatsman.runs} (${summary.topBatsman.balls})`
           : '',
@@ -1125,7 +1341,12 @@ const HomeScreen: React.FC = () => {
 
       setRecentMatches(prev => {
         const withoutUserSlide = prev.slice(1);
-        const updated = [newSlide, ...withoutUserSlide];
+        // Deduplicate by matchId - remove any existing match with same ID
+        const deduplicated = withoutUserSlide.filter(
+          (match: any) => !match.matchId || match.matchId !== newSlide.matchId
+        );
+        const updated = [newSlide, ...deduplicated];
+        // Limit to static slides length to prevent too many matches
         const limited = updated.slice(0, staticMatchSlides.length);
         return [getUserTeamMatch(), ...limited];
       });
@@ -1142,13 +1363,20 @@ const HomeScreen: React.FC = () => {
     resetAutoMatchFlow('complete');
   };
 
-  const handleStartMatchNext = async (teamA: LiveTeam, teamB: LiveTeam) => {
+  const handleStartMatchNext = async (teamA: LiveTeam, teamB: LiveTeam, venue?: any) => {
     // Create ONE match ID for the entire session
     const newMatchId = `match-${Date.now()}`;
     setSelectedMatchId(newMatchId);
     setSessionMatchId(newMatchId);
     console.log('🏏 Created session match ID:', newMatchId);
+    console.log('🏏 Selected venue:', venue);
     setSelectedTeams({ teamA, teamB });
+    
+    // Store venue if provided
+    if (venue) {
+      const venueName = typeof venue === 'string' ? venue : venue.name;
+      await AsyncStorage.setItem('currentMatchVenue', venueName);
+    }
     
     // Save match state to localStorage
     try {
@@ -1212,12 +1440,15 @@ const HomeScreen: React.FC = () => {
     setShowOverSelection(true);
   };
 
+  const [isStartingMatch, setIsStartingMatch] = useState(false);
+
   const handleMatchSetupComplete = async (setupData: {
     battingOrder: string[];
     bowlingOrder: string[];
     teamAPlayers: any[];
     teamBPlayers: any[];
   }) => {
+    setIsStartingMatch(true);
     const orderedTeamAPlayers = [
       ...setupData.battingOrder
         .map((id) => setupData.teamAPlayers.find((player) => player.id === id))
@@ -1289,6 +1520,17 @@ const HomeScreen: React.FC = () => {
     // Create the match in Firebase BEFORE going to live scoring
     try {
       const { liveScoringService } = await import('../services/liveScoringService');
+      // Get venue from storage if available
+      let venueName = 'Cricket Ground';
+      try {
+        const storedVenue = await AsyncStorage.getItem('currentMatchVenue');
+        if (storedVenue) {
+          venueName = storedVenue;
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not retrieve venue from storage:', error);
+      }
+
       const matchPayload = {
         name: `${selectedTeams?.teamA.name || 'Team A'} vs ${selectedTeams?.teamB.name || 'Team B'}`,
         team1: { id: selectedTeams?.teamA.id || 'team1', name: selectedTeams?.teamA.name || 'Team A', players: orderedTeamAPlayers },
@@ -1299,6 +1541,7 @@ const HomeScreen: React.FC = () => {
         status: 'live',
         createdBy: 'user',
         isLive: true,
+        venue: venueName,
         battingOrder: initialBattingOrder,
         bowlingOrder: initialBowlingOrder,
         remainingBatters,
@@ -1354,6 +1597,11 @@ const HomeScreen: React.FC = () => {
       );
     } catch (error) {
       console.error('❌ Error creating match:', error);
+      Alert.alert('Error', 'Failed to create match. Please try again.');
+      setIsStartingMatch(false);
+      return;
+    } finally {
+      setIsStartingMatch(false);
     }
     
     setShowMatchSetup(false);
@@ -1396,9 +1644,12 @@ const HomeScreen: React.FC = () => {
 
   const handleMatchSlidePress = (match: any, index: number) => {
     // Enhanced match data with detailed scorecards
+    // Preserve the actual Firebase document ID - use matchId if available, otherwise use id
+    const actualMatchId = match.matchId || match.id;
     const enhancedMatch = {
       ...match,
-      id: `match-${index + 1}`,
+      id: actualMatchId, // Use the actual Firebase document ID, not a placeholder
+      matchId: actualMatchId, // Ensure matchId is also set
       date: new Date().toLocaleDateString(),
       tossWinner: match.team1.name,
       tossDecision: 'Batting',
@@ -1741,17 +1992,30 @@ const HomeScreen: React.FC = () => {
       return null;
     }
     return (
-      <MatchSetupScreen
-        teamA={selectedTeams.teamA.name}
-        teamB={selectedTeams.teamB.name}
-        tossWinner={tossResult?.winner || 'Team A'}
-        tossDecision={tossResult?.decision || 'Batting'}
-        teamAPlayers={selectedPlayingXI.teamA}
-        teamBPlayers={selectedPlayingXI.teamB}
-        totalOvers={selectedOvers}
-        onBack={handleMatchSetupBack}
-        onStartMatch={handleMatchSetupComplete}
-      />
+      <>
+        <MatchSetupScreen
+          teamA={selectedTeams.teamA.name}
+          teamB={selectedTeams.teamB.name}
+          tossWinner={tossResult?.winner || 'Team A'}
+          tossDecision={tossResult?.decision || 'Batting'}
+          teamAPlayers={selectedPlayingXI.teamA}
+          teamBPlayers={selectedPlayingXI.teamB}
+          totalOvers={selectedOvers}
+          onBack={handleMatchSetupBack}
+          onStartMatch={handleMatchSetupComplete}
+        />
+        
+        {/* Loading Overlay */}
+        {isStartingMatch && (
+          <View style={styles.matchStartOverlay}>
+            <View style={styles.matchStartLoadingContent}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+              <Text style={styles.matchStartLoadingText}>Starting match...</Text>
+              <Text style={styles.matchStartLoadingSubtext}>Creating match and setting up scoring</Text>
+            </View>
+          </View>
+        )}
+      </>
     );
   }
 
@@ -2673,6 +2937,38 @@ const styles = StyleSheet.create({
   upcomingStatus: {
     color: COLORS.warning,
     backgroundColor: COLORS.warning + '20',
+  },
+  matchStartOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  matchStartLoadingContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: SIZES.xl,
+    alignItems: 'center',
+    minWidth: 250,
+    maxWidth: '80%',
+  },
+  matchStartLoadingText: {
+    marginTop: SIZES.md,
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+  },
+  matchStartLoadingSubtext: {
+    marginTop: SIZES.xs,
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray,
+    textAlign: 'center',
   },
 });
 

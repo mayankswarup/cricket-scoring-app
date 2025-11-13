@@ -557,9 +557,14 @@ class LiveScoringService {
         ...doc.data()
       } as Match));
       
-      // Filter completed matches and sort by date
+      // Filter completed matches - check both status and isMatchCompleted flag
       const finishedMatches = allMatches
-        .filter(match => match.status === 'completed')
+        .filter(match => {
+          const isCompleted = match.status === 'completed' || match.isMatchCompleted === true;
+          // Also exclude matches that are explicitly marked as live
+          const isNotLive = match.isLive !== true;
+          return isCompleted && isNotLive;
+        })
         .sort((a, b) => {
           const dateA = a.updatedAt ? a.updatedAt.toMillis() : (a.createdAt ? a.createdAt.toMillis() : 0);
           const dateB = b.updatedAt ? b.updatedAt.toMillis() : (b.createdAt ? b.createdAt.toMillis() : 0);
@@ -567,6 +572,13 @@ class LiveScoringService {
         });
       
       console.log('📚 Found finished matches:', finishedMatches.length);
+      console.log('📚 Match details:', finishedMatches.map(m => ({
+        id: m.id,
+        name: m.name,
+        status: m.status,
+        isMatchCompleted: m.isMatchCompleted,
+        isLive: m.isLive
+      })));
       return finishedMatches;
     } catch (error) {
       console.error('❌ Error getting finished matches:', error);

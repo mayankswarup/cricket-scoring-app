@@ -40,3 +40,7 @@ yarn-error.*
 coverage/
 .nyc_output/
 *.lcov
+
+# Firebase Service Account Key (NEVER commit this!)
+scripts/serviceAccountKey.json
+**/serviceAccountKey.json
