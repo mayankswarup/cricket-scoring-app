@@ -35,3 +35,12 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Firebase Service Account Key (NEVER commit this!)
+scripts/serviceAccountKey.json
+**/serviceAccountKey.json

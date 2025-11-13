@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,25 +8,23 @@ import {
   Alert,
 } from 'react-native';
 import { COLORS, SIZES, FONTS } from '../constants';
+import { Player as LivePlayer } from '../services/liveScoringService';
 
 interface MatchSetupScreenProps {
   teamA: string;
   teamB: string;
   tossWinner: string;
   tossDecision: string;
+  teamAPlayers: LivePlayer[];
+  teamBPlayers: LivePlayer[];
+  totalOvers: number;
   onBack: () => void;
   onStartMatch: (setupData: {
     battingOrder: string[];
     bowlingOrder: string[];
-    teamAPlayers: any[];
-    teamBPlayers: any[];
+    teamAPlayers: LivePlayer[];
+    teamBPlayers: LivePlayer[];
   }) => void;
-}
-
-interface Player {
-  id: string;
-  name: string;
-  role: string;
 }
 
 const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({ 
@@ -34,6 +32,9 @@ const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({
   teamB, 
   tossWinner, 
   tossDecision,
+  teamAPlayers,
+  teamBPlayers,
+  totalOvers,
   onBack, 
   onStartMatch 
 }) => {
@@ -41,34 +42,14 @@ const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({
   const battingTeam = tossDecision === 'Batting' ? tossWinner : (tossWinner === teamA ? teamB : teamA);
   const bowlingTeam = tossDecision === 'Fielding' ? tossWinner : (tossWinner === teamA ? teamB : teamA);
 
-  // Sample players for both teams
-  const [teamAPlayers] = useState<Player[]>([
-    { id: '1', name: 'Virat Kohli', role: 'Batsman' },
-    { id: '2', name: 'Rohit Sharma', role: 'Batsman' },
-    { id: '3', name: 'MS Dhoni', role: 'Wicket Keeper' },
-    { id: '4', name: 'Jasprit Bumrah', role: 'Bowler' },
-    { id: '5', name: 'Ravindra Jadeja', role: 'All Rounder' },
-    { id: '6', name: 'KL Rahul', role: 'Batsman' },
-    { id: '7', name: 'Hardik Pandya', role: 'All Rounder' },
-    { id: '8', name: 'Mohammed Shami', role: 'Bowler' },
-    { id: '9', name: 'Yuzvendra Chahal', role: 'Bowler' },
-    { id: '10', name: 'Shikhar Dhawan', role: 'Batsman' },
-    { id: '11', name: 'Rishabh Pant', role: 'Wicket Keeper' },
-  ]);
-
-  const [teamBPlayers] = useState<Player[]>([
-    { id: '1', name: 'Kane Williamson', role: 'Batsman' },
-    { id: '2', name: 'Steve Smith', role: 'Batsman' },
-    { id: '3', name: 'Jos Buttler', role: 'Wicket Keeper' },
-    { id: '4', name: 'Pat Cummins', role: 'Bowler' },
-    { id: '5', name: 'Ben Stokes', role: 'All Rounder' },
-    { id: '6', name: 'David Warner', role: 'Batsman' },
-    { id: '7', name: 'Mitchell Starc', role: 'Bowler' },
-    { id: '8', name: 'Rashid Khan', role: 'Bowler' },
-    { id: '9', name: 'Glenn Maxwell', role: 'All Rounder' },
-    { id: '10', name: 'Aaron Finch', role: 'Batsman' },
-    { id: '11', name: 'Quinton de Kock', role: 'Wicket Keeper' },
-  ]);
+  const battingTeamPlayers = useMemo(
+    () => (battingTeam === teamA ? teamAPlayers : teamBPlayers),
+    [battingTeam, teamA, teamB, teamAPlayers, teamBPlayers]
+  );
+  const bowlingTeamPlayers = useMemo(
+    () => (bowlingTeam === teamA ? teamAPlayers : teamBPlayers),
+    [bowlingTeam, teamA, teamB, teamAPlayers, teamBPlayers]
+  );
 
   const [battingOrder, setBattingOrder] = useState<string[]>([]);
   const [bowlingOrder, setBowlingOrder] = useState<string[]>([]);
@@ -80,29 +61,43 @@ const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   }, [currentSetup]);
 
+  useEffect(() => {
+    if (!battingTeamPlayers.length) {
+      setBattingOrder([]);
+      return;
+    }
+    setBattingOrder((prev) => (prev.length ? prev : battingTeamPlayers.map((player) => player.id)));
+  }, [battingTeamPlayers]);
+
+  useEffect(() => {
+    if (!bowlingTeamPlayers.length) {
+      setBowlingOrder([]);
+      return;
+    }
+    setBowlingOrder((prev) =>
+      prev.length ? prev : bowlingTeamPlayers.slice(0, Math.min(6, bowlingTeamPlayers.length)).map((player) => player.id)
+    );
+  }, [bowlingTeamPlayers]);
+
   const getCurrentTeamPlayers = () => {
-    return currentSetup === 'batting' ? teamAPlayers : teamBPlayers;
+    return currentSetup === 'batting' ? battingTeamPlayers : bowlingTeamPlayers;
   };
 
   const handlePlayerSelect = (playerId: string) => {
     if (currentSetup === 'batting') {
-      if (battingOrder.includes(playerId)) {
-        setBattingOrder(battingOrder.filter(id => id !== playerId));
-      } else {
-        setBattingOrder([...battingOrder, playerId]);
-      }
+      setBattingOrder((prev) =>
+        prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]
+      );
     } else {
-      if (bowlingOrder.includes(playerId)) {
-        setBowlingOrder(bowlingOrder.filter(id => id !== playerId));
-      } else {
-        setBowlingOrder([...bowlingOrder, playerId]);
-      }
+      setBowlingOrder((prev) =>
+        prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]
+      );
     }
   };
 
   const handleNext = () => {
     if (currentSetup === 'batting') {
-      if (battingOrder.length < 2) {
+      if (battingOrder.length < Math.min(2, battingTeamPlayers.length)) {
         Alert.alert('Error', 'Please select at least 2 batsmen');
         return;
       }
@@ -123,7 +118,7 @@ const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({
   };
 
   const getPlayerName = (playerId: string) => {
-    const players = currentSetup === 'batting' ? teamAPlayers : teamBPlayers;
+    const players = currentSetup === 'batting' ? battingTeamPlayers : bowlingTeamPlayers;
     return players.find(p => p.id === playerId)?.name || 'Unknown';
   };
 
@@ -151,6 +146,9 @@ const MatchSetupScreen: React.FC<MatchSetupScreenProps> = ({
           <Text style={styles.matchTitle}>{teamA} vs {teamB}</Text>
           <Text style={styles.tossInfo}>
             {tossWinner} won toss and chose to {tossDecision.toLowerCase()}
+          </Text>
+          <Text style={styles.oversInfo}>
+            {totalOvers} overs match
           </Text>
         </View>
 
@@ -280,6 +278,12 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
   },
+  oversInfo: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+    textAlign: 'center',
+  },
   setupSection: {
     marginBottom: SIZES.lg,
   },
@@ -308,7 +312,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   selectedPlayerCard: {
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: COLORS.primary + '10',
     borderColor: COLORS.primary,
   },
   playerInfo: {

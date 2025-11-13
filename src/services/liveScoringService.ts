@@ -30,14 +30,66 @@ export interface Match {
   updatedAt: Timestamp;
   createdBy: string;
   isLive: boolean;
+  battingOrder?: string[];
+  bowlingOrder?: string[];
+  totalRuns?: number;
+  wickets?: number;
+  currentOver?: number;
+  currentBall?: number;
+  currentBatsmen?: {
+    striker?: {
+      id?: string;
+      name?: string;
+      runs?: number;
+      balls?: number;
+      fours?: number;
+      sixes?: number;
+      isOut?: boolean;
+    };
+    nonStriker?: {
+      id?: string;
+      name?: string;
+      runs?: number;
+      balls?: number;
+      fours?: number;
+      sixes?: number;
+      isOut?: boolean;
+    };
+  };
+  currentBowler?: {
+    id?: string;
+    name?: string;
+    overs?: number;
+    wickets?: number;
+    runs?: number;
+  };
+  nextBatsman?: {
+    id?: string;
+    name?: string;
+  };
+  remainingBatters?: string[];
+  pendingFreeHit?: boolean;
+  team1PlayersOriginal?: Player[];
+  team2PlayersOriginal?: Player[];
+  battingTeamName?: string;
+  bowlingTeamName?: string;
+  inningsHistory?: any[];
+  targetScore?: number;
+  matchResult?: string;
+  isMatchCompleted?: boolean;
 }
 
 export interface Team {
   id: string;
   name: string;
+  shortName?: string;
+  city?: string;
+  logo?: string;
+  slug?: string;
   players: Player[];
   captain?: string;
   wicketKeeper?: string;
+  coach?: string;
 }
 
 export interface Player {
@@ -46,6 +98,13 @@ export interface Player {
   role: 'batsman' | 'bowler' | 'all-rounder' | 'wicket-keeper';
   battingOrder?: number;
   bowlingOrder?: number;
+  shortName?: string;
+  battingStyle?: string;
+  bowlingStyle?: string;
+  nationality?: string;
+  jerseyNumber?: number;
+  isCaptain?: boolean;
+  isWicketKeeper?: boolean;
 }
 
 export interface Innings {
@@ -73,11 +132,20 @@ export interface BallData {
   runs: number;
   isWicket: boolean;
   wicketType?: string;
+  dismissalFielderId?: string;
+  dismissalFielderName?: string;
   isExtra: boolean;
   extraType?: string;
   batsmanId: string;
   bowlerId: string;
   timestamp: Timestamp;
+  batsmanRuns?: number;
+  extraRuns?: number;
+  extraSubType?: string;
+  legalDelivery?: boolean;
+  awardedFreeHit?: boolean;
+  wasFreeHit?: boolean;
+  innings?: number;
 }
 
 export interface MatchStats {
@@ -489,9 +557,14 @@ class LiveScoringService {
         ...doc.data()
       } as Match));
       
-      // Filter completed matches and sort by date
+      // Filter completed matches - check both status and isMatchCompleted flag
       const finishedMatches = allMatches
-        .filter(match => match.status === 'completed')
+        .filter(match => {
+          const isCompleted = match.status === 'completed' || match.isMatchCompleted === true;
+          // Also exclude matches that are explicitly marked as live
+          const isNotLive = match.isLive !== true;
+          return isCompleted && isNotLive;
+        })
         .sort((a, b) => {
           const dateA = a.updatedAt ? a.updatedAt.toMillis() : (a.createdAt ? a.createdAt.toMillis() : 0);
           const dateB = b.updatedAt ? b.updatedAt.toMillis() : (b.createdAt ? b.createdAt.toMillis() : 0);
@@ -499,6 +572,13 @@ class LiveScoringService {
         });
       
       console.log('📚 Found finished matches:', finishedMatches.length);
+      console.log('📚 Match details:', finishedMatches.map(m => ({
+        id: m.id,
+        name: m.name,
+        status: m.status,
+        isMatchCompleted: m.isMatchCompleted,
+        isLive: m.isLive
+      })));
       return finishedMatches;
     } catch (error) {
       console.error('❌ Error getting finished matches:', error);
@@ -507,7 +587,7 @@ class LiveScoringService {
   }
 
   // Team Management Functions
-  async createTeam(teamData: { name: string; shortName: string; city: string; createdBy: string }): Promise<string> {
+  async createBasicTeam(teamData: { name: string; shortName: string; city: string; createdBy: string }): Promise<string> {
     try {
       const teamRef = await addDoc(collection(db, 'teams'), {
         ...teamData,

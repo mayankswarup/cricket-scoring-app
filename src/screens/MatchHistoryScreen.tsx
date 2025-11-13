@@ -20,6 +20,8 @@ interface MatchWithScores extends Match {
   currentOver?: number;
   currentBall?: number;
   ballsCount?: number;
+  team1Score?: string; // Format: "runs/wickets"
+  team2Score?: string; // Format: "runs/wickets"
 }
 
 interface MatchHistoryScreenProps {
@@ -61,14 +63,59 @@ export const MatchHistoryScreen: React.FC<MatchHistoryScreenProps> = ({ onBack }
               console.log('📊 Sample ball data:', balls[0]);
             }
             
-            // Calculate totals from balls
-            const totalRuns = balls.reduce((sum, ball) => sum + (ball.runs || 0), 0);
-            const totalWickets = balls.filter(ball => ball.isWicket).length;
+            // Calculate totals from balls - separate by innings if available
+            let team1Runs = 0;
+            let team1Wickets = 0;
+            let team2Runs = 0;
+            let team2Wickets = 0;
+            
+            // Check if match has inningsHistory
+            const inningsHistory = (match as any).inningsHistory || [];
+            
+            if (inningsHistory.length > 0) {
+              // Use innings history if available
+              const firstInnings = inningsHistory[0];
+              team1Runs = firstInnings.totalRuns || 0;
+              team1Wickets = firstInnings.wickets || 0;
+              
+              if (inningsHistory.length > 1) {
+                const secondInnings = inningsHistory[1];
+                team2Runs = secondInnings.totalRuns || 0;
+                team2Wickets = secondInnings.wickets || 0;
+              }
+            } else {
+              // Calculate from balls - separate by innings number
+              const innings1Balls = balls.filter(ball => (ball.innings || 1) === 1);
+              const innings2Balls = balls.filter(ball => (ball.innings || 2) === 2);
+              
+              // Team1 batting in innings 1
+              team1Runs = innings1Balls.reduce((sum, ball) => {
+                if (ball.isExtra) return sum;
+                return sum + (ball.batsmanRuns || ball.runs || 0);
+              }, 0);
+              team1Wickets = innings1Balls.filter(ball => ball.isWicket).length;
+              
+              // Team2 batting in innings 2 (if exists)
+              if (innings2Balls.length > 0) {
+                team2Runs = innings2Balls.reduce((sum, ball) => {
+                  if (ball.isExtra) return sum;
+                  return sum + (ball.batsmanRuns || ball.runs || 0);
+                }, 0);
+                team2Wickets = innings2Balls.filter(ball => ball.isWicket).length;
+              } else {
+                // If no second innings, use match totals as team1 score
+                const totalRuns = balls.reduce((sum, ball) => sum + (ball.runs || 0), 0);
+                const totalWickets = balls.filter(ball => ball.isWicket).length;
+                team1Runs = totalRuns;
+                team1Wickets = totalWickets;
+              }
+            }
+            
             const totalBalls = balls.length;
             const overs = Math.floor(totalBalls / 6);
             const ballsInOver = totalBalls % 6;
             
-            console.log(`📊 Match ${index + 1} stats: ${totalRuns} runs, ${totalWickets} wickets, ${totalBalls} balls`);
+            console.log(`📊 Match ${index + 1} stats: Team1 ${team1Runs}/${team1Wickets}, Team2 ${team2Runs}/${team2Wickets}, ${totalBalls} balls`);
             
             // If no balls found, try to get basic match info from the match document itself
             if (totalBalls === 0) {
@@ -85,17 +132,21 @@ export const MatchHistoryScreen: React.FC<MatchHistoryScreenProps> = ({ onBack }
                 wickets: matchWickets,
                 currentOver: matchOvers,
                 currentBall: matchBalls,
-                ballsCount: 0
+                ballsCount: 0,
+                team1Score: `${matchRuns}/${matchWickets}`,
+                team2Score: undefined,
               };
             }
             
             return {
               ...match,
-              totalRuns,
-              wickets: totalWickets,
+              totalRuns: team1Runs, // Keep for backward compatibility
+              wickets: team1Wickets,
               currentOver: overs,
               currentBall: ballsInOver,
-              ballsCount: totalBalls
+              ballsCount: totalBalls,
+              team1Score: `${team1Runs}/${team1Wickets}`,
+              team2Score: team2Runs > 0 || team2Wickets > 0 ? `${team2Runs}/${team2Wickets}` : undefined,
             };
           } catch (error) {
             console.error(`❌ Error loading balls for match ${match.id}:`, error);
@@ -111,7 +162,20 @@ export const MatchHistoryScreen: React.FC<MatchHistoryScreenProps> = ({ onBack }
         })
       );
       
-      console.log('📊 Final matches with scores:', matchesWithScores);
+      // Sort by createdAt (most recent first), then by updatedAt if createdAt is same
+      matchesWithScores.sort((a, b) => {
+        const dateA = a.createdAt?.seconds || 0;
+        const dateB = b.createdAt?.seconds || 0;
+        if (dateB !== dateA) {
+          return dateB - dateA; // Most recent first
+        }
+        // If createdAt is same, sort by updatedAt
+        const updatedA = a.updatedAt?.seconds || 0;
+        const updatedB = b.updatedAt?.seconds || 0;
+        return updatedB - updatedA;
+      });
+      
+      console.log('📊 Final matches with scores (sorted):', matchesWithScores.length);
       setMatches(matchesWithScores);
     } catch (error) {
       console.error('❌ Error loading match history:', error);
@@ -123,6 +187,13 @@ export const MatchHistoryScreen: React.FC<MatchHistoryScreenProps> = ({ onBack }
   };
 
   const handleMatchPress = (match: MatchWithScores) => {
+    console.log('🔍 Opening match details:', {
+      matchId: match.id,
+      matchName: match.name,
+      team1: match.team1?.name,
+      team2: match.team2?.name,
+      fullMatch: match,
+    });
     setSelectedMatch(match);
     setShowMatchDetails(true);
   };
@@ -134,6 +205,17 @@ export const MatchHistoryScreen: React.FC<MatchHistoryScreenProps> = ({ onBack }
 
   useEffect(() => {
     loadMatchHistory();
+  }, []);
+
+  // Refresh match history when screen is opened (after initial load)
+  useEffect(() => {
+    // Small delay to ensure any pending Firebase writes complete
+    const timer = setTimeout(() => {
+      console.log('🔄 Refreshing match history after delay');
+      loadMatchHistory();
+    }, 1000);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const handleRefresh = () => {
@@ -161,6 +243,20 @@ export const MatchHistoryScreen: React.FC<MatchHistoryScreenProps> = ({ onBack }
   };
 
   const getMatchScore = (match: MatchWithScores) => {
+    // Use team1Score and team2Score if available, otherwise fallback to old format
+    if (match.team1Score) {
+      if (match.team2Score) {
+        // Both innings completed
+        return `${match.team1Score} | ${match.team2Score}`;
+      } else {
+        // Only first innings
+        const overs = match.currentOver || 0;
+        const balls = match.currentBall || 0;
+        return `${match.team1Score} (${overs}.${balls})`;
+      }
+    }
+    
+    // Fallback to old format
     const runs = match.totalRuns || 0;
     const wickets = match.wickets || 0;
     const overs = match.currentOver || 0;
@@ -269,9 +365,8 @@ export const MatchHistoryScreen: React.FC<MatchHistoryScreenProps> = ({ onBack }
       </ScrollView>
 
       {/* Match Details Modal */}
-      {selectedMatch && (
+      {selectedMatch && showMatchDetails && (
         <MatchDetailsModal
-          visible={showMatchDetails}
           onClose={handleCloseMatchDetails}
           match={selectedMatch}
         />

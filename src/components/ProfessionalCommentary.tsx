@@ -12,6 +12,7 @@ interface BallEvent {
   isNoBall?: boolean;
   batsman?: string;
   bowler?: string;
+  bowlerId?: string;
   commentary?: string;
   dismissal?: string;
   timestamp: number;
@@ -28,7 +29,11 @@ interface ProfessionalCommentaryProps {
   currentOver: CurrentOver;
   recentBalls: BallEvent[];
   currentBatsman: string;
+  currentBatsmanStats?: { runs: number; balls: number };
   currentBowler: string;
+  currentBowlerStats?: { overs: number; wickets: number; runs: number };
+  bowlerId?: string;
+  allBalls?: BallEvent[];
   totalRuns: number;
   totalWickets: number;
 }
@@ -37,10 +42,68 @@ const ProfessionalCommentary: React.FC<ProfessionalCommentaryProps> = ({
   currentOver,
   recentBalls,
   currentBatsman,
+  currentBatsmanStats,
   currentBowler,
+  currentBowlerStats,
+  bowlerId,
+  allBalls = [],
   totalRuns,
   totalWickets,
 }) => {
+  // Calculate maidens (complete overs with 0 runs from legal deliveries)
+  const calculateMaidens = (): number => {
+    if (!bowlerId || !allBalls || allBalls.length === 0) {
+      return 0;
+    }
+
+    const bowlerBalls = allBalls.filter(ball => 
+      (ball.bowlerId === bowlerId) || (ball.bowler === currentBowler && !ball.bowlerId)
+    );
+    
+    const oversMap = new Map<number, { runs: number; legalDeliveries: number }>();
+
+    bowlerBalls.forEach(ball => {
+      const over = ball.over;
+      if (!oversMap.has(over)) {
+        oversMap.set(over, { runs: 0, legalDeliveries: 0 });
+      }
+      const overData = oversMap.get(over)!;
+      
+      // Only count legal deliveries (not wides or no-balls) for maidens
+      if (!ball.isWide && !ball.isNoBall) {
+        overData.legalDeliveries += 1;
+        overData.runs += ball.runs || 0;
+      }
+    });
+
+    let maidens = 0;
+    oversMap.forEach((overData, over) => {
+      // A maiden is a complete over (6 legal deliveries) with 0 runs
+      if (overData.legalDeliveries === 6 && overData.runs === 0) {
+        maidens += 1;
+      }
+    });
+
+    return maidens;
+  };
+
+  const formatBowlingFigures = (): string => {
+    if (!currentBowlerStats) {
+      return '0-0-0-0';
+    }
+    const maidens = calculateMaidens();
+    const oversWhole = Math.floor(currentBowlerStats.overs);
+    const oversDecimal = currentBowlerStats.overs % 1;
+    const oversFormatted = oversDecimal > 0 ? `${oversWhole}.${Math.round(oversDecimal * 10)}` : `${oversWhole}`;
+    return `${oversFormatted}-${maidens}-${currentBowlerStats.runs}-${currentBowlerStats.wickets}`;
+  };
+
+  const formatBattingStats = (): string => {
+    if (!currentBatsmanStats) {
+      return '0(0)';
+    }
+    return `${currentBatsmanStats.runs}(${currentBatsmanStats.balls})`;
+  };
   const getBallSymbol = (ball: BallEvent) => {
     if (ball.isWicket) return 'W';
     if (ball.isWide) return 'WD';
@@ -85,11 +148,11 @@ const ProfessionalCommentary: React.FC<ProfessionalCommentaryProps> = ({
     <View style={styles.currentPlayersContainer}>
       <View style={styles.playerInfo}>
         <Text style={styles.playerName}>{currentBatsman}</Text>
-        <Text style={styles.playerStats}>1(1)</Text>
+        <Text style={styles.playerStats}>{formatBattingStats()}</Text>
       </View>
       <View style={styles.playerInfo}>
         <Text style={styles.playerName}>{currentBowler}</Text>
-        <Text style={styles.playerStats}>2-0-12-2</Text>
+        <Text style={styles.playerStats}>{formatBowlingFigures()}</Text>
       </View>
     </View>
   );

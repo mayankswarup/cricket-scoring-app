@@ -8,26 +8,31 @@ import {
   Alert,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { COLORS, SIZES, FONTS } from '../constants';
-import { REAL_CRICKET_TEAMS } from '../data/realCricketData';
-import { liveScoringService } from '../services/liveScoringService';
+import { liveScoringService, Team, Player } from '../services/liveScoringService';
+import { initializeDemoData, MANUAL_TEST_TEAMS } from '../utils/demoData';
+import VenueSelector, { Venue } from '../components/VenueSelector';
 // import { UI_CONFIG } from '../config/appConfig';
 
 interface StartMatchScreenProps {
   onBack: () => void;
-  onNext: (teamA: string, teamB: string) => void;
+  onNext: (teamA: Team, teamB: Team, venue?: Venue | string) => void;
   onCreateTeam?: () => void;
 }
 
 const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onCreateTeam }) => {
-  const [selectedTeamA, setSelectedTeamA] = useState<string>('');
-  const [selectedTeamB, setSelectedTeamB] = useState<string>('');
+  const [selectedTeamA, setSelectedTeamA] = useState<Team | null>(null);
+  const [selectedTeamB, setSelectedTeamB] = useState<Team | null>(null);
+  const [selectedVenue, setSelectedVenue] = useState<Venue | string | null>(null);
+  const [venueSelectorKey, setVenueSelectorKey] = useState(0); // Key to reset VenueSelector
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [selectingFor, setSelectingFor] = useState<'A' | 'B'>('A');
   const [searchQuery, setSearchQuery] = useState('');
-  const [allTeams, setAllTeams] = useState<any[]>([]);
+  const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isStartingMatch, setIsStartingMatch] = useState(false);
 
   // Load teams from Firebase and combine with real cricket teams
   useEffect(() => {
@@ -37,72 +42,105 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
   const loadTeams = async () => {
     try {
       setLoading(true);
-      
-      // Load teams from Firebase (user-created teams)
-      const firebaseTeams = await liveScoringService.getAllTeams();
-      
-      // Convert Firebase teams to our format
-      const firebaseTeamsFormatted = firebaseTeams.map((team: any) => ({
-        id: team.id,
-        name: team.name,
-        shortName: team.name.substring(0, 3).toUpperCase(), // Generate short name
-        city: team.location || 'Unknown',
-        logo: '🏏', // Default logo
-        members: team.players?.length || 0,
-        location: team.location || 'Unknown',
-        isUserCreated: true
-      }));
 
-      // Real cricket teams with professional players
-      const realCricketTeams = REAL_CRICKET_TEAMS.map((team: any) => ({
-        id: team.id,
-        name: team.name,
-        shortName: team.shortName,
-        city: team.city,
-        logo: team.logo,
-        members: team.players.length,
-        location: team.city,
-        isUserCreated: false
-      }));
+      let firebaseTeams = await liveScoringService.getAllTeams();
 
-      // Combine both: User-created teams first, then real cricket teams
-      const combinedTeams = [...firebaseTeamsFormatted, ...realCricketTeams];
-      setAllTeams(combinedTeams);
+      if (!firebaseTeams.length) {
+        console.log('📦 No teams found in Firestore. Seeding demo data...');
+        try {
+          await initializeDemoData();
+          // Wait a bit for Firestore to propagate the changes
+          await new Promise(resolve => setTimeout(resolve, 500));
+          firebaseTeams = await liveScoringService.getAllTeams();
+          console.log(`✅ Loaded ${firebaseTeams.length} teams from Firestore after seeding`);
+        } catch (seedError) {
+          console.error('❌ Error seeding demo data:', seedError);
+          // Continue with fallback
+        }
+      } else {
+        console.log(`✅ Loaded ${firebaseTeams.length} teams from Firestore`);
+      }
+
+      let sanitizedTeams: Team[] = firebaseTeams
+        .map((team: Team) => ({
+          id: team.id,
+          name: team.name,
+          shortName: team.shortName || team.name.slice(0, 3).toUpperCase(),
+          city: team.city,
+          logo: team.logo,
+          players: (team.players || []).map((player) => ({
+            id: player.id,
+            name: player.name,
+            role: player.role || 'batsman',
+            shortName: player.shortName || player.name,
+            battingStyle: player.battingStyle,
+            bowlingStyle: player.bowlingStyle,
+            nationality: player.nationality,
+            jerseyNumber: player.jerseyNumber,
+            isCaptain: player.isCaptain,
+            isWicketKeeper: player.isWicketKeeper,
+          })) as Player[],
+          captain: team.captain,
+          wicketKeeper: team.wicketKeeper,
+          coach: team.coach,
+        }))
+        .filter((team) => team.players && team.players.length >= 11);
+
+      if (!sanitizedTeams.length) {
+        // Only log once, not as a warning - this is normal fallback behavior
+        console.log('ℹ️ Using fallback teams (Firestore teams have less than 11 players or seeding needs time to propagate)');
+        const manualFallback: Team[] = MANUAL_TEST_TEAMS.map((team) => ({
+          id: team.id,
+          name: team.name,
+          shortName: team.shortName,
+          city: team.city,
+          logo: team.logo,
+          players: team.players.map((player) => ({
+            id: player.id,
+            name: player.name,
+            role: player.role,
+            shortName: player.name.split(' ')[0] || player.name,
+            battingStyle: player.battingStyle,
+            bowlingStyle: player.bowlingStyle,
+            nationality: undefined,
+            jerseyNumber: undefined,
+            isCaptain: player.isCaptain,
+            isWicketKeeper: player.isWicketKeeper,
+          })),
+          captain: team.players.find((player) => player.isCaptain)?.id,
+          wicketKeeper: team.players.find((player) => player.isWicketKeeper)?.id,
+          coach: undefined,
+        }));
+        sanitizedTeams = manualFallback;
+      }
+
+      const sortedTeams = sanitizedTeams.sort((a, b) => a.name.localeCompare(b.name));
+      setAllTeams(sortedTeams);
     } catch (error) {
       console.error('Error loading teams:', error);
-      // Fallback to just real cricket teams
-      const realCricketTeams = REAL_CRICKET_TEAMS.map((team: any) => ({
-        id: team.id,
-        name: team.name,
-        shortName: team.shortName,
-        city: team.city,
-        logo: team.logo,
-        members: team.players.length,
-        location: team.city,
-        isUserCreated: false
-      }));
-      setAllTeams(realCricketTeams);
+      setAllTeams([]);
     } finally {
       setLoading(false);
     }
   };
 
   // Filter teams based on search query
-  const filteredTeams = allTeams.filter((team: any) => 
+  const filteredTeams = allTeams.filter((team: Team) => 
     team.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    team.location.toLowerCase().includes(searchQuery.toLowerCase())
+    (team.city || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (team.shortName || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleTeamSelect = (teamId: string) => {
+  const handleTeamSelect = (team: Team) => {
     if (selectingFor === 'A') {
-      setSelectedTeamA(teamId);
-      if (teamId === selectedTeamB) {
-        setSelectedTeamB('');
+      setSelectedTeamA(team);
+      if (team.id === selectedTeamB?.id) {
+        setSelectedTeamB(null);
       }
     } else {
-      setSelectedTeamB(teamId);
-      if (teamId === selectedTeamA) {
-        setSelectedTeamA('');
+      setSelectedTeamB(team);
+      if (team.id === selectedTeamA?.id) {
+        setSelectedTeamA(null);
       }
     }
     setShowTeamModal(false);
@@ -115,17 +153,31 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
     setSearchQuery('');
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!selectedTeamA || !selectedTeamB) {
       Alert.alert('Error', 'Please select both teams');
       return;
     }
 
-    const teamA = allTeams.find((t: any) => t.id === selectedTeamA);
-    const teamB = allTeams.find((t: any) => t.id === selectedTeamB);
+    if (!selectedTeamA.players || selectedTeamA.players.length < 11) {
+      Alert.alert('Team A Incomplete', 'Selected Team A does not have at least 11 players.');
+      return;
+    }
+
+    if (!selectedTeamB.players || selectedTeamB.players.length < 11) {
+      Alert.alert('Team B Incomplete', 'Selected Team B does not have at least 11 players.');
+      return;
+    }
     
-    if (teamA && teamB) {
-      onNext(teamA.name, teamB.name);
+    setIsStartingMatch(true);
+    try {
+      // Small delay to show spinner
+      await new Promise(resolve => setTimeout(resolve, 100));
+      onNext(selectedTeamA, selectedTeamB, selectedVenue || undefined);
+    } catch (error) {
+      console.error('Error starting match:', error);
+      Alert.alert('Error', 'Failed to start match. Please try again.');
+      setIsStartingMatch(false);
     }
   };
 
@@ -137,8 +189,16 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Start A Match</Text>
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-          <Text style={styles.nextButtonText}>▶</Text>
+        <TouchableOpacity 
+          style={[styles.nextButton, isStartingMatch && styles.nextButtonDisabled]} 
+          onPress={handleNext}
+          disabled={isStartingMatch}
+        >
+          {isStartingMatch ? (
+            <ActivityIndicator size="small" color={COLORS.white} />
+          ) : (
+            <Text style={styles.nextButtonText}>▶</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -149,6 +209,50 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
           </View>
         ) : (
           <>
+            {/* Venue Selection - Before Team Selection */}
+            <View style={styles.section}>
+              <VenueSelector
+                key={venueSelectorKey} // Reset component when key changes
+                value={typeof selectedVenue === 'string' ? selectedVenue : selectedVenue?.name || ''}
+                onSelect={(venue) => {
+                  // Replace existing selection with new one
+                  setSelectedVenue(venue);
+                }}
+                label="Match Venue"
+                placeholder="Search for a venue (e.g., Spartan, Cowel)"
+                required={false}
+                disabled={false} // Will be disabled once match starts
+              />
+              
+              {/* Display Selected Venue - Always show below input */}
+              {selectedVenue && (
+                <View style={styles.selectedVenueDisplay}>
+                  <Text style={styles.selectedVenueLabel}>Selected Venue:</Text>
+                  <View style={styles.selectedVenueCard}>
+                    <Text style={styles.selectedVenueName}>
+                      {typeof selectedVenue === 'string' ? selectedVenue : selectedVenue.name}
+                    </Text>
+                    {typeof selectedVenue !== 'string' && selectedVenue.area && (
+                      <Text style={styles.selectedVenueArea}>
+                        📍 {selectedVenue.area}, {selectedVenue.city || 'Bengaluru'}
+                        {selectedVenue.type && ` • ${selectedVenue.type === 'paid' ? 'Paid' : selectedVenue.type === 'free' ? 'Free' : 'Mixed'}`}
+                      </Text>
+                    )}
+                    <TouchableOpacity
+                      style={styles.removeVenueButton}
+                      onPress={() => {
+                        setSelectedVenue(null);
+                        // Reset VenueSelector component to clear its internal state
+                        setVenueSelectorKey(prev => prev + 1);
+                      }}
+                    >
+                      <Text style={styles.removeVenueText}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+
             {/* Team A Selection */}
             <View style={styles.teamSection}>
           <View style={styles.teamIcon}>
@@ -165,20 +269,20 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
             <View style={styles.selectedTeam}>
               <View style={styles.selectedTeamInfo}>
                 <Text style={styles.selectedTeamLogo}>
-                  {allTeams.find((t: any) => t.id === selectedTeamA)?.logo}
+                  {selectedTeamA.logo || '🏏'}
                 </Text>
                 <View>
                   <Text style={styles.teamName}>
-                    {allTeams.find((t: any) => t.id === selectedTeamA)?.name}
+                    {selectedTeamA.name}
                   </Text>
                   <Text style={styles.teamShortName}>
-                    {allTeams.find((t: any) => t.id === selectedTeamA)?.shortName}
+                    {selectedTeamA.shortName || selectedTeamA.name.slice(0, 3).toUpperCase()}
                   </Text>
                 </View>
               </View>
               <TouchableOpacity 
                 style={styles.changeButton}
-                onPress={() => setSelectedTeamA('')}
+                onPress={() => setSelectedTeamA(null)}
               >
                 <Text style={styles.changeButtonText}>Change</Text>
               </TouchableOpacity>
@@ -210,20 +314,20 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
             <View style={styles.selectedTeam}>
               <View style={styles.selectedTeamInfo}>
                 <Text style={styles.selectedTeamLogo}>
-                  {allTeams.find((t: any) => t.id === selectedTeamB)?.logo}
+                  {selectedTeamB.logo || '🏏'}
                 </Text>
                 <View>
                   <Text style={styles.teamName}>
-                    {allTeams.find((t: any) => t.id === selectedTeamB)?.name}
+                    {selectedTeamB.name}
                   </Text>
                   <Text style={styles.teamShortName}>
-                    {allTeams.find((t: any) => t.id === selectedTeamB)?.shortName}
+                    {selectedTeamB.shortName || selectedTeamB.name.slice(0, 3).toUpperCase()}
                   </Text>
                 </View>
               </View>
               <TouchableOpacity 
                 style={styles.changeButton}
-                onPress={() => setSelectedTeamB('')}
+                onPress={() => setSelectedTeamB(null)}
               >
                 <Text style={styles.changeButtonText}>Change</Text>
               </TouchableOpacity>
@@ -275,30 +379,29 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
                   <Text style={styles.noResultsSubtext}>Try a different search term</Text>
                 </View>
               ) : (
-                filteredTeams.map((team: any) => (
+                filteredTeams.map((team: Team) => (
                   <TouchableOpacity
                     key={team.id}
                     style={[
                       styles.teamCard,
-                      (selectedTeamA === team.id || selectedTeamB === team.id) && styles.selectedTeamCard
+                      (selectedTeamA?.id === team.id || selectedTeamB?.id === team.id) && styles.selectedTeamCard
                     ]}
-                    onPress={() => handleTeamSelect(team.id)}
+                    onPress={() => handleTeamSelect(team)}
                   >
                     <View style={styles.teamInfo}>
                       <View style={styles.teamHeader}>
-                        <Text style={styles.teamLogo}>{team.logo}</Text>
+                        <Text style={styles.teamLogo}>{team.logo || '🏏'}</Text>
                         <View style={styles.teamDetails}>
                           <Text style={styles.teamCardName}>{team.name}</Text>
-                          <Text style={styles.teamShortName}>{team.shortName}</Text>
-                          {team.isUserCreated && (
-                            <Text style={styles.userCreatedTag}>Your Team</Text>
-                          )}
+                          <Text style={styles.teamShortName}>{team.shortName || team.name.slice(0, 3).toUpperCase()}</Text>
                         </View>
                       </View>
-                      <Text style={styles.teamLocation}>{team.location}</Text>
-                      <Text style={styles.teamMembers}>{team.members} players</Text>
+                      <Text style={styles.teamLocation}>{team.city || 'Unknown location'}</Text>
+                      <Text style={styles.teamMembers}>
+                        {(team.players && team.players.length) || 0} players
+                      </Text>
                     </View>
-                    {(selectedTeamA === team.id || selectedTeamB === team.id) && (
+                    {(selectedTeamA?.id === team.id || selectedTeamB?.id === team.id) && (
                       <View style={styles.checkmark}>
                         <Text style={styles.checkmarkText}>✓</Text>
                       </View>
@@ -312,6 +415,17 @@ const StartMatchScreen: React.FC<StartMatchScreenProps> = ({ onBack, onNext, onC
           </>
         )}
       </ScrollView>
+
+      {/* Loading Overlay */}
+      {isStartingMatch && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingContent}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.matchStartLoadingText}>Starting match...</Text>
+            <Text style={styles.matchStartLoadingSubtext}>Please wait</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -350,9 +464,47 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontFamily: FONTS.bold,
   },
+  nextButtonDisabled: {
+    opacity: 0.6,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: SIZES.xl,
+    alignItems: 'center',
+    minWidth: 200,
+  },
+  matchStartLoadingText: {
+    marginTop: SIZES.md,
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+  },
+  matchStartLoadingSubtext: {
+    marginTop: SIZES.xs,
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray,
+  },
   content: {
     flex: 1,
     paddingHorizontal: SIZES.lg,
+  },
+  section: {
+    paddingHorizontal: SIZES.lg,
+    paddingVertical: SIZES.md,
+    marginBottom: SIZES.md,
   },
   teamSection: {
     alignItems: 'center',
@@ -371,6 +523,43 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: COLORS.white,
     fontFamily: FONTS.bold,
+  },
+  selectedVenueDisplay: {
+    marginTop: SIZES.md,
+  },
+  selectedVenueLabel: {
+    fontSize: 14,
+    fontFamily: FONTS.medium,
+    color: COLORS.text,
+    marginBottom: SIZES.xs,
+  },
+  selectedVenueCard: {
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 12,
+    padding: SIZES.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  selectedVenueName: {
+    fontSize: 16,
+    fontFamily: FONTS.bold,
+    color: COLORS.text,
+    marginBottom: SIZES.xs,
+  },
+  selectedVenueArea: {
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray,
+    marginBottom: SIZES.xs,
+  },
+  removeVenueButton: {
+    alignSelf: 'flex-start',
+    marginTop: SIZES.xs,
+  },
+  removeVenueText: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.error,
   },
   selectButton: {
     backgroundColor: '#28a745',

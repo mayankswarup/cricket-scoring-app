@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,12 +20,14 @@ interface ShotDetailsModalProps {
   onConfirm: (shotDetails: ShotDetails) => void;
   runs: number;
   isWicket: boolean;
+  batsmanName?: string;
+  bowlerName?: string;
 }
 
 export interface ShotDetails {
-  shotType?: string;
-  shotRegion?: string;
-  shotQuality?: string;
+  shotType?: string | string[];
+  shotRegion?: string | string[];
+  shotQuality?: string | string[];
   commentary?: string; // Optional commentary field
 }
 
@@ -35,45 +37,132 @@ const ShotDetailsModal: React.FC<ShotDetailsModalProps> = ({
   onConfirm,
   runs,
   isWicket,
+  batsmanName,
+  bowlerName,
 }) => {
-  const [selectedShotType, setSelectedShotType] = useState('');
-  const [selectedRegion, setSelectedRegion] = useState('');
-  const [selectedQuality, setSelectedQuality] = useState('');
+  const [selectedShotTypes, setSelectedShotTypes] = useState<string[]>([]);
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedQualities, setSelectedQualities] = useState<string[]>([]);
   const [commentary, setCommentary] = useState('');
 
-  // Auto-generate commentary based on selections
-  const generateCommentary = (shotType: string, region: string, quality: string) => {
-    const playerName = "Rohit Sharma"; // You can make this dynamic later
+  // Smart commentary generation that handles single or multiple selections
+  const generateCommentary = useCallback((
+    shotTypes: string[],
+    regions: string[],
+    qualities: string[]
+  ) => {
+    const playerName = batsmanName || 'the batter';
+    const bowlerText = bowlerName ? ` off ${bowlerName}` : '';
     const runsText = runs === 6 ? "6" : runs === 4 ? "4" : `${runs} run${runs > 1 ? 's' : ''}`;
     
-    let baseCommentary = `What a ${shotType.toLowerCase()} by ${playerName}!`;
-    
-    if (region) {
-      baseCommentary += ` He has hit it to ${region}`;
+    // Helper function to format multiple selections
+    const formatList = (items: string[]): string => {
+      if (items.length === 0) return '';
+      if (items.length === 1) return items[0].toLowerCase();
+      if (items.length === 2) return `${items[0].toLowerCase()} and ${items[1].toLowerCase()}`;
+      return `${items.slice(0, -1).map(i => i.toLowerCase()).join(', ')}, and ${items[items.length - 1].toLowerCase()}`;
+    };
+
+    const hasShotType = shotTypes.length > 0;
+    const hasRegion = regions.length > 0;
+    const hasQuality = qualities.length > 0;
+
+    let commentary = '';
+
+    // Build commentary based on what's selected
+    if (hasShotType) {
+      const shotTypeText = formatList(shotTypes);
+      commentary = `What a ${shotTypeText} by ${playerName}${bowlerText}!`;
+      
+      if (hasRegion && hasQuality) {
+        const regionText = formatList(regions);
+        const qualityText = formatList(qualities);
+        commentary += ` He has hit it to ${regionText} with ${qualityText} for ${runsText}!`;
+      } else if (hasRegion) {
+        const regionText = formatList(regions);
+        commentary += ` He has hit it to ${regionText} for ${runsText}!`;
+      } else if (hasQuality) {
+        const qualityText = formatList(qualities);
+        commentary += ` He has hit it with ${qualityText} for ${runsText}!`;
+      } else {
+        commentary += ` He has hit it for ${runsText}!`;
+      }
+    } else if (hasRegion && hasQuality) {
+      const regionText = formatList(regions);
+      const qualityText = formatList(qualities);
+      commentary = `${playerName}${bowlerText} has hit it to ${regionText} with ${qualityText} for ${runsText}!`;
+    } else if (hasRegion) {
+      const regionText = formatList(regions);
+      commentary = `${playerName}${bowlerText} has hit it to ${regionText} for ${runsText}!`;
+    } else if (hasQuality) {
+      const qualityText = formatList(qualities);
+      commentary = `${playerName}${bowlerText} has hit it with ${qualityText} for ${runsText}!`;
+    } else {
+      // Fallback if nothing is selected (shouldn't happen, but just in case)
+      commentary = `${playerName}${bowlerText} has scored ${runsText}!`;
     }
-    
-    if (quality) {
-      baseCommentary += ` with ${quality.toLowerCase()}`;
+
+    return commentary;
+  }, [batsmanName, bowlerName, runs]);
+
+  // Auto-generate commentary whenever selections change
+  useEffect(() => {
+    // Only generate if at least one option is selected
+    if (selectedShotTypes.length > 0 || selectedRegions.length > 0 || selectedQualities.length > 0) {
+      const autoCommentary = generateCommentary(selectedShotTypes, selectedRegions, selectedQualities);
+      setCommentary(autoCommentary);
     }
-    
-    baseCommentary += ` for ${runsText}!`;
-    
-    return baseCommentary;
-  };
+  }, [selectedShotTypes, selectedRegions, selectedQualities, generateCommentary]);
 
   const handleConfirm = () => {
     // Allow confirmation with just runs - shot details are optional
-    onConfirm({
-      shotType: selectedShotType || undefined,
-      shotRegion: selectedRegion || undefined,
-      shotQuality: selectedQuality || undefined,
-      commentary: commentary.trim() || undefined, // Optional field - only include if user wrote something
-    });
+    const trimmedCommentary = commentary.trim();
+    const shotDetails: ShotDetails = {};
+
+    if (selectedShotTypes.length > 0) {
+      shotDetails.shotType = selectedShotTypes.length === 1 ? selectedShotTypes[0] : selectedShotTypes;
+    }
+    if (selectedRegions.length > 0) {
+      shotDetails.shotRegion = selectedRegions.length === 1 ? selectedRegions[0] : selectedRegions;
+    }
+    if (selectedQualities.length > 0) {
+      shotDetails.shotQuality = selectedQualities.length === 1 ? selectedQualities[0] : selectedQualities;
+    }
+    if (trimmedCommentary) {
+      shotDetails.commentary = trimmedCommentary;
+    }
+
+    onConfirm(shotDetails);
     // Reset selections
-    setSelectedShotType('');
-    setSelectedRegion('');
-    setSelectedQuality('');
+    setSelectedShotTypes([]);
+    setSelectedRegions([]);
+    setSelectedQualities([]);
     setCommentary('');
+  };
+
+  // Toggle selection helper functions
+  const toggleShotType = (shot: string) => {
+    setSelectedShotTypes(prev => 
+      prev.includes(shot)
+        ? prev.filter(s => s !== shot)
+        : [...prev, shot]
+    );
+  };
+
+  const toggleRegion = (region: string) => {
+    setSelectedRegions(prev => 
+      prev.includes(region)
+        ? prev.filter(r => r !== region)
+        : [...prev, region]
+    );
+  };
+
+  const toggleQuality = (quality: string) => {
+    setSelectedQualities(prev => 
+      prev.includes(quality)
+        ? prev.filter(q => q !== quality)
+        : [...prev, quality]
+    );
   };
 
   const renderShotTypeSection = () => (
@@ -89,20 +178,13 @@ const ShotDetailsModal: React.FC<ShotDetailsModalProps> = ({
                   key={shot}
                   style={[
                     styles.optionButton,
-                    selectedShotType === shot && styles.selectedOption,
+                    selectedShotTypes.includes(shot) && styles.selectedOption,
                   ]}
-                  onPress={() => {
-                    setSelectedShotType(shot);
-                    // Auto-generate commentary when shot type is selected
-                    if (selectedRegion && selectedQuality) {
-                      const autoCommentary = generateCommentary(shot, selectedRegion, selectedQuality);
-                      setCommentary(autoCommentary);
-                    }
-                  }}
+                  onPress={() => toggleShotType(shot)}
                 >
                   <Text style={[
                     styles.optionText,
-                    selectedShotType === shot && styles.selectedOptionText,
+                    selectedShotTypes.includes(shot) && styles.selectedOptionText,
                   ]}>
                     {shot}
                   </Text>
@@ -124,20 +206,13 @@ const ShotDetailsModal: React.FC<ShotDetailsModalProps> = ({
             key={region}
             style={[
               styles.optionButton,
-              selectedRegion === region && styles.selectedOption,
+              selectedRegions.includes(region) && styles.selectedOption,
             ]}
-            onPress={() => {
-              setSelectedRegion(region);
-              // Auto-generate commentary when region is selected
-              if (selectedShotType && selectedQuality) {
-                const autoCommentary = generateCommentary(selectedShotType, region, selectedQuality);
-                setCommentary(autoCommentary);
-              }
-            }}
+            onPress={() => toggleRegion(region)}
           >
             <Text style={[
               styles.optionText,
-              selectedRegion === region && styles.selectedOptionText,
+              selectedRegions.includes(region) && styles.selectedOptionText,
             ]}>
               {region}
             </Text>
@@ -156,20 +231,13 @@ const ShotDetailsModal: React.FC<ShotDetailsModalProps> = ({
             key={quality}
             style={[
               styles.optionButton,
-              selectedQuality === quality && styles.selectedOption,
+              selectedQualities.includes(quality) && styles.selectedOption,
             ]}
-            onPress={() => {
-              setSelectedQuality(quality);
-              // Auto-generate commentary when quality is selected
-              if (selectedShotType && selectedRegion) {
-                const autoCommentary = generateCommentary(selectedShotType, selectedRegion, quality);
-                setCommentary(autoCommentary);
-              }
-            }}
+            onPress={() => toggleQuality(quality)}
           >
             <Text style={[
               styles.optionText,
-              selectedQuality === quality && styles.selectedOptionText,
+              selectedQualities.includes(quality) && styles.selectedOptionText,
             ]}>
               {quality}
             </Text>
@@ -186,21 +254,21 @@ const ShotDetailsModal: React.FC<ShotDetailsModalProps> = ({
         <Text style={styles.commentaryHint}>
           Write your own commentary for this shot (optional)...
         </Text>
-        {selectedShotType && selectedRegion && selectedQuality && (
+        {(selectedShotTypes.length > 0 || selectedRegions.length > 0 || selectedQualities.length > 0) && (
           <TouchableOpacity
             style={styles.generateButton}
             onPress={() => {
-              const autoCommentary = generateCommentary(selectedShotType, selectedRegion, selectedQuality);
+              const autoCommentary = generateCommentary(selectedShotTypes, selectedRegions, selectedQualities);
               setCommentary(autoCommentary);
             }}
           >
-            <Text style={styles.generateButtonText}>✨ Auto-Generate</Text>
+            <Text style={styles.generateButtonText}>✨ Regenerate</Text>
           </TouchableOpacity>
         )}
       </View>
       <TextInput
         style={styles.commentaryTextArea}
-        placeholder="e.g., What a pull shot by Rohit Sharma! He has hit it for a mind-blowing 6!"
+        placeholder={`e.g., What a pull shot by ${batsmanName || 'the batter'}! He has hit it for ${runs === 6 ? 'a massive 6' : runs === 4 ? 'a cracking boundary' : `${runs} runs`}!`}
         placeholderTextColor={COLORS.gray}
         value={commentary}
         onChangeText={setCommentary}

@@ -1,0 +1,33 @@
+[1mdiff --git a/src/components/SideDrawer.tsx b/src/components/SideDrawer.tsx[m
+[1mindex f694d15..d74bab4 100644[m
+[1m--- a/src/components/SideDrawer.tsx[m
+[1m+++ b/src/components/SideDrawer.tsx[m
+[36m@@ -44,6 +44,7 @@[m [minterface SideDrawerProps {[m
+   onRateUsPress?: () => void;[m
+   onSuperAdminPress?: () => void;[m
+   onPrivacyPolicyPress?: () => void;[m
+[32m+[m[32m  onAboutUsPress?: () => void;[m
+ }[m
+ [m
+ const SideDrawer: React.FC<SideDrawerProps> = ({[m
+[36m@@ -63,6 +64,7 @@[m [mconst SideDrawer: React.FC<SideDrawerProps> = ({[m
+   onRateUsPress,[m
+   onSuperAdminPress,[m
+   onPrivacyPolicyPress,[m
+[32m+[m[32m  onAboutUsPress,[m
+ }) => {[m
+   const [showMoreMenu, setShowMoreMenu] = useState(false);[m
+   const scrollViewRef = useRef<ScrollView>(null);[m
+[36m@@ -293,6 +295,12 @@[m [mconst SideDrawer: React.FC<SideDrawerProps> = ({[m
+       icon: '🔒',[m
+       onPress: onPrivacyPolicyPress || (() => console.log('Privacy Policy pressed')),[m
+     },[m
+[32m+[m[32m    {[m
+[32m+[m[32m      id: 'about',[m
+[32m+[m[32m      label: 'About Us',[m
+[32m+[m[32m      icon: 'ℹ️',[m
+[32m+[m[32m      onPress: onAboutUsPress || (() => console.log('About Us pressed')),[m
+[32m+[m[32m    },[m
+     {[m
+       id: 'rate',[m
+       label: 'Rate us',[m

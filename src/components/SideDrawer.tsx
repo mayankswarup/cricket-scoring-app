@@ -44,6 +44,7 @@ interface SideDrawerProps {
   onRateUsPress?: () => void;
   onSuperAdminPress?: () => void;
   onPrivacyPolicyPress?: () => void;
+  onAboutUsPress?: () => void;
 }
 
 const SideDrawer: React.FC<SideDrawerProps> = ({
@@ -63,6 +64,7 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
   onRateUsPress,
   onSuperAdminPress,
   onPrivacyPolicyPress,
+  onAboutUsPress,
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -292,6 +294,12 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
       label: 'Privacy Policy',
       icon: '🔒',
       onPress: onPrivacyPolicyPress || (() => console.log('Privacy Policy pressed')),
+    },
+    {
+      id: 'about',
+      label: 'About Us',
+      icon: 'ℹ️',
+      onPress: onAboutUsPress || (() => console.log('About Us pressed')),
     },
     {
       id: 'rate',

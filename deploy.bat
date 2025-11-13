@@ -1,6 +1,22 @@
 @echo off
 echo 🏏 Starting Cricket App Deployment...
 
+echo 📝 Staging all changes...
+git add .
+
+echo 💾 Committing changes (if any)...
+git commit -m "Update: Auto-commit before deployment at %date% %time%"
+if errorlevel 1 (
+    echo ⚠️  No changes to commit or commit failed
+) else (
+    echo ✅ Changes committed successfully
+    echo 🚀 Pushing changes to GitHub...
+    git push origin simple-cricket-app
+    if errorlevel 1 (
+        echo ⚠️  Push failed, will retry after build
+    )
+)
+
 echo 📦 Building app for web...
 npx expo export --platform web --output-dir docs
 if errorlevel 1 (
